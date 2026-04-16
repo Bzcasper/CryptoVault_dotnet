@@ -1,0 +1,132 @@
+@* Search modal for finding and selecting Binance assets *@
+@inject IMarketDataService MarketData
+
+@if (IsVisible)
+{
+    <div class="cv-modal-overlay" @onclick="Close">
+        <div class="cv-modal" @onclick:stopPropagation="true" style="max-width: 600px;">
+            <div class="cv-modal-header">
+                <span class="cv-modal-title">
+                    <i class="bi bi-search" style="margin-right: 8px;"></i>Search Assets
+                </span>
+                <button class="cv-modal-close" @onclick="Close">✕</button>
+            </div>
+
+            <div class="cv-modal-body" style="padding-top: 16px;">
+                <!-- Search Input -->
+                <div class="search-bar" style="margin-bottom: 20px;">
+                    <i class="bi bi-search search-icon"></i>
+                    <input type="text" class="cv-input" style="padding-left: 40px;"
+                           placeholder="Search by symbol or name (e.g., BTC, Ethereum)..."
+                           @bind="searchQuery" @bind:event="oninput"
+                           @onkeyup="OnSearchKeyUp" />
+                </div>
+
+                @if (isSearching)
+                {
+                    <LoadingSpinner />
+                }
+                else if (searchResults != null && searchResults.Any())
+                {
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        @foreach (var asset in searchResults)
+                        {
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border-radius: var(--radius-md); cursor: pointer; transition: background 150ms ease;"
+                                 class="search-result-row"
+                                 @onclick="() => SelectAsset(asset)">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <img src="@asset.ImageUrl" alt="@asset.BaseAsset" style="width: 32px; height: 32px; border-radius: 50%; background: var(--bg-tertiary);"
+                                          />
+                                    <div>
+                                        <div style="font-weight: 600;">@asset.BaseAsset</div>
+                                        <div style="font-size: 0.78rem; color: var(--text-secondary);">@asset.DisplayName</div>
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-weight: 600; font-variant-numeric: tabular-nums;">$@asset.Price.ToString("N2")</div>
+                                    <ChangeIndicator Value="@asset.PriceChangePercent" />
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(searchQuery) && searchQuery.Length >= 2)
+                {
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><i class="bi bi-search"></i></div>
+                        <div class="empty-state-text">No assets found</div>
+                        <div class="empty-state-hint">Try searching with a different symbol or name</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <div class="empty-state-icon"><i class="bi bi-coin"></i></div>
+                        <div class="empty-state-text">Search for cryptocurrencies</div>
+                        <div class="empty-state-hint">Type at least 2 characters to search</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<MarketAssetDto> OnAssetSelected { get; set; }
+
+    private string searchQuery = "";
+    private List<MarketAssetDto> searchResults;
+    private bool isSearching = false;
+    private System.Threading.Timer _debounceTimer;
+
+    private void OnSearchKeyUp()
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await SearchAsync();
+                StateHasChanged();
+            });
+        }, null, 400, Timeout.Infinite);
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery) || searchQuery.Length < 2)
+        {
+            searchResults = null;
+            return;
+        }
+
+        isSearching = true;
+        StateHasChanged();
+
+        try
+        {
+            searchResults = await MarketData.SearchAssetsAsync(searchQuery);
+        }
+        catch
+        {
+            searchResults = new List<MarketAssetDto>();
+        }
+
+        isSearching = false;
+    }
+
+    private async Task SelectAsset(MarketAssetDto asset)
+    {
+        await OnAssetSelected.InvokeAsync(asset);
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        searchQuery = "";
+        searchResults = null;
+        await OnClose.InvokeAsync();
+    }
+}

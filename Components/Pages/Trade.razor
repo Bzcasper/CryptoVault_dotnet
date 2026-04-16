@@ -1,0 +1,627 @@
+@page "/trade"
+@page "/trade/{Symbol}"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IMarketDataService MarketData
+@inject ITransactionService TransactionService
+@inject IPortfolioService PortfolioService
+@inject IAssetService AssetService
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+@implements IDisposable
+
+@code {
+    [Inject] private CryptoVault.Infrastructure.ExternalApi.BinancePriceStreamService PriceStream { get; set; }
+    private System.Timers.Timer _priceTimer;
+}
+
+<PageTitle>Trade @displaySymbol — CryptoVault</PageTitle>
+
+@if (marketData == null)
+{
+    <LoadingSpinner />
+}
+else
+{
+    <!-- Ticker Bar -->
+    <div class="ticker-bar animate-in">
+        <div class="ticker-main">
+            <img src="@marketData.ImageUrl" alt="@marketData.BaseAsset" class="ticker-icon"
+                  />
+            <div>
+                <div class="ticker-symbol">@marketData.BaseAsset<span class="ticker-quote">/USDT</span></div>
+                <div class="ticker-name">@marketData.DisplayName</div>
+            </div>
+        </div>
+
+        <div class="ticker-price-block">
+            <div class="ticker-big-price" style="color: @(marketData.PriceChangePercent >= 0 ? "var(--success)" : "var(--danger)")">
+                $@FormatPrice(marketData.Price)
+            </div>
+            <div class="ticker-usd">≈ $@FormatPrice(marketData.Price) USD</div>
+        </div>
+
+        <div class="ticker-stats">
+            <div class="ticker-stat">
+                <div class="ticker-stat-label">24h Change</div>
+                <div class="ticker-stat-value @(marketData.PriceChangePercent >= 0 ? "positive" : "negative")">
+                    @(marketData.PriceChangePercent >= 0 ? "+" : "")@marketData.PriceChangePercent.ToString("N2")%
+                </div>
+            </div>
+            <div class="ticker-stat">
+                <div class="ticker-stat-label">24h High</div>
+                <div class="ticker-stat-value">$@FormatPrice(marketData.HighPrice)</div>
+            </div>
+            <div class="ticker-stat">
+                <div class="ticker-stat-label">24h Low</div>
+                <div class="ticker-stat-value">$@FormatPrice(marketData.LowPrice)</div>
+            </div>
+            <div class="ticker-stat">
+                <div class="ticker-stat-label">24h Volume</div>
+                <div class="ticker-stat-value">@FormatVolume(marketData.QuoteVolume)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Trade Layout: 3 columns -->
+    <div class="trade-layout animate-in" style="animation-delay: 100ms;">
+        <!-- LEFT: Order Book -->
+        <div class="cv-card trade-panel order-book-panel">
+            <div class="cv-card-header" style="margin-bottom: 8px;">
+                <span class="cv-card-title">Order Book</span>
+            </div>
+            <div class="order-book-header">
+                <span>Price (USDT)</span>
+                <span>Amount (@displaySymbol)</span>
+                <span>Total</span>
+            </div>
+            <!-- Ask side (sells) — shown in red, descending -->
+            <div class="order-book-asks">
+                @foreach (var ask in orderBookAsks)
+                {
+                    <div class="order-book-row ask">
+                        <div class="ob-bar" style="width: @(ask.DepthPercent)%; background: var(--danger-light);"></div>
+                        <span class="text-danger">@FormatPrice(ask.Price)</span>
+                        <span>@ask.Amount.ToString("N4")</span>
+                        <span>@ask.Total.ToString("N2")</span>
+                    </div>
+                }
+            </div>
+            <!-- Current price indicator -->
+            <div class="order-book-spread">
+                <span style="font-weight: 700; font-size: 1rem; color: @(marketData.PriceChangePercent >= 0 ? "var(--success)" : "var(--danger)");">
+                    $@FormatPrice(marketData.Price)
+                </span>
+                <span style="font-size: 0.75rem; color: var(--text-tertiary);">
+                    ≈ $@FormatPrice(marketData.Price)
+                </span>
+            </div>
+            <!-- Bid side (buys) — shown in green, descending -->
+            <div class="order-book-bids">
+                @foreach (var bid in orderBookBids)
+                {
+                    <div class="order-book-row bid">
+                        <div class="ob-bar" style="width: @(bid.DepthPercent)%; background: var(--success-light);"></div>
+                        <span class="text-success">@FormatPrice(bid.Price)</span>
+                        <span>@bid.Amount.ToString("N4")</span>
+                        <span>@bid.Total.ToString("N2")</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- CENTER: Chart -->
+        <div class="cv-card trade-panel chart-panel" style="padding: 0; display: flex; flex-direction: column; background-color: var(--bg-primary); overflow: hidden; border: 1px solid var(--border-color);">
+            
+            <!-- Top Tab Row -->
+            <div style="min-height: 42px; height: 42px; border-bottom: 1px solid var(--border-color); padding: 0px 16px; display: flex; justify-content: space-between; align-items: center; background: var(--bg-primary);">
+                <div style="display: flex; gap: 24px; height: 100%;">
+                    <div style="color: var(--text-primary); border-bottom: 2px solid var(--accent); display: flex; align-items: center; font-size: 14px; font-weight: 500; cursor: pointer;">Graphique</div>
+                </div>
+            </div>
+
+            <!-- Toolbar Row -->
+            <div style="min-height: 40px; border-bottom: 1px solid var(--border-color); padding: 0 16px; display: flex; align-items: center; justify-content: space-between; background: var(--bg-primary);">
+                <!-- Time Intervals -->
+                <div style="display: flex; gap: 12px; align-items: center; font-size: 12px; font-weight: 500;">
+                    <span style="color: var(--text-tertiary);">Durée</span>
+                    @foreach (var interval in chartIntervals)
+                    {
+                        <div style="cursor: pointer; padding: 2px 4px; color: @(activeInterval == interval.Key ? "var(--text-primary)" : "var(--text-tertiary)");"
+                             @onclick="() => ChangeInterval(interval.Key, interval.Value)">
+                             @interval.Key
+                        </div>
+                    }
+                    <svg style="width:16px; height:16px; color:var(--text-tertiary); margin-left:8px;" viewBox="0 0 24 24"><path d="M16.37 8.75H7.63a.75.75 0 00-.569 1.238l4.37 5.098c.299.349.84.349 1.138 0l4.37-5.098a.75.75 0 00-.57-1.238z" fill="currentColor"></path></svg>
+
+                    <!-- Divider -->
+                    <div style="width: 1px; height: 16px; background: var(--border-color); margin: 0 8px;"></div>
+                    
+                </div>
+                <!-- Right Side Views -->
+                <div style="display: flex; gap: 16px; font-size: 12px; font-weight: 500;">
+                </div>
+            </div>
+            
+            <div class="draggableCancel relative" style="height: 480px; width: 100%; display: flex;">
+                
+                <!-- Main Chart Area -->
+                <div class="focus-area flex-1 block relative" data-testid="kline" style="width: 100%; height: 100%; position: relative;">
+                    
+                    <!-- OHLC Header Overlay -->
+                    <div style="position: absolute; left: 0px; top: 0px; width: 100%; z-index: 2000; pointer-events: none; padding: 8px;">
+                        <!-- Main Metrics -->
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; font-size: 12px; font-weight: 500; font-family: 'BinanceNova', sans-serif;">
+                            <span style="color: var(--text-tertiary); margin-right: 8px;">@DateTime.UtcNow.ToString("yyyy/MM/dd")</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">Ouverture</span>
+                            <span style="color: @GetChangeColor(); margin-right: 8px;">@GetO()</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">Haut</span>
+                            <span style="color: @GetChangeColor(); margin-right: 8px;">@GetH()</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">Bas</span>
+                            <span style="color: @GetChangeColor(); margin-right: 8px;">@GetL()</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">Fermeture</span>
+                            <span style="color: @GetChangeColor(); margin-right: 8px;">@GetC()</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">Variation</span>
+                            <span style="color: @GetChangeColor(); margin-right: 8px;">@GetChangePercent()</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">Fourchette</span>
+                            <span style="color: @GetChangeColor(); margin-right: 8px;">@GetAmp()</span>
+                        </div>
+                        
+                        <!-- MA Indicators -->
+                        <div style="display: flex; align-items: center; font-size: 12px; font-weight: 500; font-family: 'BinanceNova', sans-serif; margin-top: 4px;">
+                            <span style="color: var(--text-primary); margin-right: 4px;">MA(7)</span>
+                            <span style="color: rgb(240, 185, 11); margin-right: 8px;">@GetO()</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">MA(25)</span>
+                            <span style="color: rgb(235, 64, 181); margin-right: 8px;">@GetL()</span>
+                            <span style="color: var(--text-primary); margin-right: 4px;">MA(99)</span>
+                            <span style="color: rgb(179, 133, 248); margin-right: 8px;">@GetH()</span>
+                        </div>
+
+                        <!-- Vol Indicators -->
+                        <div style="display: flex; align-items: center; font-size: 12px; font-weight: 500; margin-top: 4px; font-family: 'BinanceNova', sans-serif;">
+                            <span style="color: var(--text-primary); margin-right: 4px;">Vol(USDT)</span>
+                            <span style="color: rgb(234, 236, 239); margin-right: 8px;">@GetVol()</span>
+                        </div>
+                    </div>
+
+                    <!-- Chart JS Canvas Layer -->
+                    <div class="kline-container" style="position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; z-index: 100;">
+                        <div id="tradeChart" style="width: 100%; height: 100%; display: block;"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- RIGHT: Trade Form + Recent Trades -->
+        <div class="trade-right-col">
+            <!-- Trade Form Card -->
+            <div class="cv-card trade-panel trade-form-card">
+                <!-- Buy/Sell Tabs -->
+                <div class="trade-tabs">
+                    <button class="trade-tab buy @(isBuyMode ? "active" : "")"
+                            @onclick="() => isBuyMode = true">
+                        BUY
+                    </button>
+                    <button class="trade-tab sell @(!isBuyMode ? "active" : "")"
+                            @onclick="() => isBuyMode = false">
+                        SELL
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(tradeError))
+                {
+                    <div class="trade-alert error">
+                        <i class="bi bi-exclamation-triangle"></i> @tradeError
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(tradeSuccess))
+                {
+                    <div class="trade-alert success">
+                        <i class="bi bi-check-circle"></i> @tradeSuccess
+                    </div>
+                }
+
+                <!-- Order Type -->
+                <div class="trade-form-row">
+                    <label class="cv-label">Order Type</label>
+                    <div class="order-type-pills">
+                        <button class="order-pill active">Market</button>
+                    </div>
+                </div>
+
+                <!-- Price -->
+                <div class="trade-form-row">
+                    <label class="cv-label">Price</label>
+                    <div class="trade-input-group">
+                        <input type="text" class="cv-input" value="@FormatPrice(marketData.Price)" readonly
+                               style="color: var(--text-secondary);" />
+                        <span class="input-suffix">USDT</span>
+                    </div>
+                </div>
+
+                <!-- Quantity -->
+                <div class="trade-form-row">
+                    <label class="cv-label">Amount</label>
+                    <div class="trade-input-group">
+                        <input type="number" class="cv-input" step="any" min="0.00000001"
+                               @bind="tradeQuantity" @bind:event="oninput" placeholder="0.00" />
+                        <span class="input-suffix">@displaySymbol</span>
+                    </div>
+                </div>
+
+                <!-- Quick Percentage Buttons -->
+                <div class="quick-percent-row">
+                    <button class="quick-pct" @onclick="() => SetQuickPercent(25)">25%</button>
+                    <button class="quick-pct" @onclick="() => SetQuickPercent(50)">50%</button>
+                    <button class="quick-pct" @onclick="() => SetQuickPercent(75)">75%</button>
+                    <button class="quick-pct" @onclick="() => SetQuickPercent(100)">100%</button>
+                </div>
+
+                <!-- Total -->
+                <div class="trade-form-row">
+                    <label class="cv-label">Total</label>
+                    <div class="trade-input-group">
+                        <input type="text" class="cv-input" value="@((tradeQuantity * marketData.Price).ToString("N2"))" readonly />
+                        <span class="input-suffix">USDT</span>
+                    </div>
+                </div>
+
+                <!-- Fee + Available -->
+                <div class="trade-info-rows">
+                    <div class="trade-info-row">
+                        <span>Fee (0.1%)</span>
+                        <span>@((tradeQuantity * marketData.Price * 0.001m).ToString("N4")) USDT</span>
+                    </div>
+                    <div class="trade-info-row">
+                        <span>Available</span>
+                        <span>@(isBuyMode ? $"${availableBudget:N2} USDT" : $"{holdingQuantity:N6} {displaySymbol}")</span>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button class="cv-btn trade-submit-btn @(isBuyMode ? "cv-btn-success" : "cv-btn-danger")"
+                        @onclick="ExecuteTrade" disabled="@isProcessing" style="width: 100%;">
+                    @if (isProcessing)
+                    {
+                        <span>Processing...</span>
+                    }
+                    else
+                    {
+                        <span>@(isBuyMode ? "Buy" : "Sell") @displaySymbol</span>
+                    }
+                </button>
+            </div>
+
+            <!-- Recent Trades Card -->
+            <div class="cv-card trade-panel">
+                <div class="cv-card-header" style="margin-bottom: 8px;">
+                    <span class="cv-card-title">My Trades</span>
+                </div>
+                @if (recentTrades.Any())
+                {
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        @foreach (var tx in recentTrades.Take(10))
+                        {
+                            <div class="recent-trade-row">
+                                <div>
+                                    <span class="cv-badge @(tx.Type == TransactionType.Buy ? "cv-badge-buy" : "cv-badge-sell")">
+                                        @tx.TypeDisplay
+                                    </span>
+                                </div>
+                                <div style="text-align: right; font-variant-numeric: tabular-nums;">
+                                    <div style="font-weight: 600; font-size: 0.82rem;">@tx.Quantity.ToString("N4") at $@tx.PricePerUnit.ToString("N2")</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-tertiary);">@tx.ExecutedAt.ToString("MMM dd, HH:mm")</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div style="padding: 16px; text-align: center; color: var(--text-tertiary); font-size: 0.85rem;">
+                        No trades for @displaySymbol yet
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Symbol { get; set; }
+
+    private string activeSymbol;
+    private string displaySymbol;
+    private MarketAssetDto marketData;
+    private List<CandlestickDto> chartData = new();
+    private List<TransactionDto> recentTrades = new();
+    private List<OrderBookEntry> orderBookAsks = new();
+    private List<OrderBookEntry> orderBookBids = new();
+
+    private decimal availableBudget;
+    private decimal holdingQuantity;
+    private int portfolioId;
+
+    // OHLC dynamic binders
+    private CandlestickDto CurrentCandle => chartData?.LastOrDefault();
+    private string GetO() => FormatPrice(CurrentCandle?.Open ?? 0);
+    private string GetH() => FormatPrice(CurrentCandle?.High ?? 0);
+    private string GetL() => FormatPrice(CurrentCandle?.Low ?? 0);
+    private string GetC() => FormatPrice(CurrentCandle?.Close ?? 0);
+    private string GetChangePercent() 
+    {
+        if (CurrentCandle == null || CurrentCandle.Open == 0) return "0.00%";
+        var pct = ((CurrentCandle.Close - CurrentCandle.Open) / CurrentCandle.Open) * 100m;
+        return (pct >= 0 ? "+" : "") + pct.ToString("N2") + "%";
+    }
+    private string GetAmp()
+    {
+        if (CurrentCandle == null || CurrentCandle.Low == 0) return "0.00%";
+        var pct = ((CurrentCandle.High - CurrentCandle.Low) / CurrentCandle.Low) * 100m;
+        return pct.ToString("N2") + "%";
+    }
+    private string GetChangeColor() 
+    {
+        if (CurrentCandle == null) return "rgb(234, 236, 239)";
+        return CurrentCandle.Close >= CurrentCandle.Open ? "rgb(46, 189, 133)" : "rgb(246, 70, 93)";
+    }
+    private string GetVol() => FormatVolume(CurrentCandle?.Volume ?? 0);
+
+    private bool isBuyMode = true;
+    private decimal tradeQuantity;
+    private string tradeError;
+    private string tradeSuccess;
+    private bool isProcessing;
+
+    private string activeInterval = "1 J";
+    private readonly Dictionary<string, (string binanceInterval, int limit)> chartIntervals = new()
+    {
+        { "1 s", ("1m", 500) }, // fallback to 1m
+        { "15 min", ("15m", 500) },
+        { "1 h", ("1h", 500) },
+        { "4 h", ("4h", 500) },
+        { "1 J", ("1d", 500) },
+        { "1 S", ("1w", 500) }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        activeSymbol = string.IsNullOrEmpty(Symbol) ? "BTCUSDT" : Symbol.ToUpperInvariant();
+        if (!activeSymbol.EndsWith("USDT")) activeSymbol += "USDT";
+        displaySymbol = activeSymbol.Replace("USDT", "");
+
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+        availableBudget = portfolio.CurrentBudget;
+
+        await LoadAllData();
+        
+        // Start real-time tracker update loop
+        _priceTimer = new System.Timers.Timer(1000);
+        _priceTimer.Elapsed += async (s, e) => await InvokeAsync(UpdateRealTimeData);
+        _priceTimer.Start();
+    }
+    
+    private void UpdateRealTimeData()
+    {
+        if (PriceStream.LatestPrices.TryGetValue(activeSymbol, out decimal price))
+        {
+            if (CurrentCandle != null)
+            {
+                bool changed = false;
+                if (price != CurrentCandle.Close)
+                {
+                    CurrentCandle.Close = price;
+                    changed = true;
+                }
+                if (price > CurrentCandle.High) { CurrentCandle.High = price; changed = true; }
+                if (price < CurrentCandle.Low) { CurrentCandle.Low = price; changed = true; }
+
+                if (changed)
+                {
+                    var tick = new {
+                        time = ((DateTimeOffset)CurrentCandle.OpenTime).ToUnixTimeSeconds(),
+                        open = (double)CurrentCandle.Open,
+                        high = (double)CurrentCandle.High,
+                        low = (double)CurrentCandle.Low,
+                        close = (double)CurrentCandle.Close
+                    };
+                    
+                    JS.InvokeVoidAsync("updatePriceChartTick", "tradeChart", tick);
+                    
+                    marketData.Price = price;
+                    StateHasChanged(); // Only update DOM if necessary
+                }
+            }
+        }
+    }
+    
+    public void Dispose()
+    {
+        _priceTimer?.Stop();
+        _priceTimer?.Dispose();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (chartData?.Any() == true)
+        {
+            var candleData = chartData.Select(c => new {
+                time = ((DateTimeOffset)c.OpenTime).ToUnixTimeSeconds(),
+                open = (double)c.Open,
+                high = (double)c.High,
+                low = (double)c.Low,
+                close = (double)c.Close
+            }).ToArray();
+
+            var volumeData = chartData.Select(c => new {
+                time = ((DateTimeOffset)c.OpenTime).ToUnixTimeSeconds(),
+                value = (double)c.Volume,
+                color = c.Close >= c.Open ? "rgba(14, 203, 129, 0.5)" : "rgba(246, 70, 93, 0.5)"
+            }).ToArray();
+
+            await JS.InvokeVoidAsync("createPriceChart", "tradeChart", candleData, volumeData);
+        }
+    }
+
+    private async Task LoadAllData()
+    {
+        // Load market data
+        marketData = await MarketData.GetMarketDataAsync(activeSymbol);
+
+        // Load chart data
+        var interval = chartIntervals[activeInterval];
+        chartData = await MarketData.GetChartDataAsync(activeSymbol, interval.binanceInterval, interval.limit);
+
+        // Load holdings for this symbol
+        var asset = await AssetService.GetAssetBySymbolAsync(portfolioId, activeSymbol);
+        holdingQuantity = asset?.Quantity ?? 0m;
+
+        // Load recent trades for this symbol
+        var allTransactions = await TransactionService.GetTransactionsAsync(portfolioId, activeSymbol);
+        recentTrades = allTransactions.Take(10).ToList();
+
+        // Generate order book
+        GenerateOrderBook();
+    }
+
+    private async Task ChangeInterval(string label, (string binanceInterval, int limit) interval)
+    {
+        activeInterval = label;
+        chartData = await MarketData.GetChartDataAsync(activeSymbol, interval.binanceInterval, interval.limit);
+        StateHasChanged();
+    }
+
+    private void GenerateOrderBook()
+    {
+        if (marketData == null) return;
+
+        var price = marketData.Price;
+        var spread = price * 0.001m; // 0.1% spread
+        var random = new Random(activeSymbol.GetHashCode());
+
+        orderBookAsks = new List<OrderBookEntry>();
+        orderBookBids = new List<OrderBookEntry>();
+
+        // Generate 8 ask levels (above current price)
+        for (int i = 8; i >= 1; i--)
+        {
+            var askPrice = price + (spread * i * 0.5m);
+            var amount = Math.Round((decimal)(random.NextDouble() * 5 + 0.1), 4);
+            orderBookAsks.Add(new OrderBookEntry
+            {
+                Price = askPrice,
+                Amount = amount,
+                Total = Math.Round(askPrice * amount, 2),
+                DepthPercent = random.Next(20, 95)
+            });
+        }
+
+        // Generate 8 bid levels (below current price)
+        for (int i = 1; i <= 8; i++)
+        {
+            var bidPrice = price - (spread * i * 0.5m);
+            var amount = Math.Round((decimal)(random.NextDouble() * 5 + 0.1), 4);
+            orderBookBids.Add(new OrderBookEntry
+            {
+                Price = bidPrice,
+                Amount = amount,
+                Total = Math.Round(bidPrice * amount, 2),
+                DepthPercent = random.Next(20, 95)
+            });
+        }
+    }
+
+    private void SetQuickPercent(int percent)
+    {
+        if (marketData == null || marketData.Price <= 0) return;
+
+        if (isBuyMode)
+        {
+            var maxCost = availableBudget * percent / 100m;
+            tradeQuantity = Math.Round(maxCost / marketData.Price, 8);
+        }
+        else
+        {
+            tradeQuantity = Math.Round(holdingQuantity * percent / 100m, 8);
+        }
+    }
+
+    private async Task ExecuteTrade()
+    {
+        tradeError = null;
+        tradeSuccess = null;
+
+        if (tradeQuantity <= 0)
+        {
+            tradeError = "Please enter a valid quantity.";
+            return;
+        }
+
+        isProcessing = true;
+
+        try
+        {
+            var currentPrice = await MarketData.GetCurrentPriceAsync(activeSymbol);
+            var tradeType = isBuyMode ? TransactionType.Buy : TransactionType.Sell;
+
+            await TransactionService.ExecuteTradeAsync(
+                portfolioId, activeSymbol, marketData.DisplayName, marketData.ImageUrl,
+                tradeType, tradeQuantity, currentPrice);
+
+            tradeSuccess = $"Successfully {(isBuyMode ? "bought" : "sold")} {tradeQuantity:N6} {displaySymbol} at ${currentPrice:N2}";
+
+            // Refresh data
+            var portfolio = await PortfolioService.GetPortfolioByIdAsync(portfolioId);
+            availableBudget = portfolio?.CurrentBudget ?? 0m;
+
+            var asset = await AssetService.GetAssetBySymbolAsync(portfolioId, activeSymbol);
+            holdingQuantity = asset?.Quantity ?? 0m;
+
+            var allTransactions = await TransactionService.GetTransactionsAsync(portfolioId, activeSymbol);
+            recentTrades = allTransactions.Take(10).ToList();
+
+            tradeQuantity = 0m;
+            GenerateOrderBook();
+        }
+        catch (InvalidOperationException ex)
+        {
+            tradeError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            tradeError = $"Trade failed: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private string FormatPrice(decimal price)
+    {
+        if (price >= 1000) return price.ToString("N2");
+        if (price >= 1) return price.ToString("N3");
+        if (price >= 0.01m) return price.ToString("N4");
+        return price.ToString("N6");
+    }
+
+    private string FormatVolume(decimal volume)
+    {
+        if (volume >= 1_000_000_000) return "$" + (volume / 1_000_000_000).ToString("N2") + "B";
+        if (volume >= 1_000_000) return "$" + (volume / 1_000_000).ToString("N2") + "M";
+        if (volume >= 1_000) return "$" + (volume / 1_000).ToString("N2") + "K";
+        return "$" + volume.ToString("N2");
+    }
+
+    // Order book data model
+    private class OrderBookEntry
+    {
+        public decimal Price { get; set; }
+        public decimal Amount { get; set; }
+        public decimal Total { get; set; }
+        public int DepthPercent { get; set; }
+    }
+}

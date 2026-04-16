@@ -1,0 +1,34 @@
+## [Visual Studio]
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+
+## [Build Artifacts]
+bin/
+obj/
+publish/
+
+## [Databases]
+*.db
+*.db-shm
+*.db-wal
+
+## [Secrets & Configuration]
+appsettings.Development.json
+*.pfx
+*.cert
+*.secret
+
+## [OS Generated]
+[Dd]esktop.ini
+.DS_Store
+Thumbs.db
+
+## [Antigravity/AI]
+.gemini/
+.antigravity/
+implementation_plan.md
+task.md
+walkthrough.md
+*.log

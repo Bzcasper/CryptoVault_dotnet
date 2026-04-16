@@ -1,0 +1,161 @@
+@page "/transactions"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IPortfolioService PortfolioService
+@inject ITransactionService TransactionService
+
+<PageTitle>Transactions — CryptoVault</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Transaction History</h1>
+        <div class="page-subtitle">Complete record of all buy and sell operations</div>
+    </div>
+</div>
+
+@if (transactions == null)
+{
+    <LoadingSpinner />
+}
+else
+{
+    <!-- Filters -->
+    <div class="filters-bar">
+        <button class="filter-chip @(typeFilter == null ? "active" : "")" @onclick="() => FilterByType(null)">All</button>
+        <button class="filter-chip @(typeFilter == TransactionType.Buy ? "active" : "")" @onclick="() => FilterByType(TransactionType.Buy)">
+            <i class="bi bi-arrow-down-circle"></i> Buys
+        </button>
+        <button class="filter-chip @(typeFilter == TransactionType.Sell ? "active" : "")" @onclick="() => FilterByType(TransactionType.Sell)">
+            <i class="bi bi-arrow-up-circle"></i> Sells
+        </button>
+
+        <div style="flex: 1;"></div>
+
+        <div class="search-bar" style="width: 250px;">
+            <i class="bi bi-search search-icon"></i>
+            <input type="text" class="cv-input" style="padding-left: 36px; font-size: 0.85rem;"
+                   placeholder="Filter by symbol..."
+                   @bind="symbolFilter" @bind:event="oninput" @onkeyup="ApplyFilters" />
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 24px;">
+        <div class="cv-card stat-card accent">
+            <div class="cv-card-title">Total Transactions</div>
+            <div class="stat-value">@filteredTransactions.Count</div>
+        </div>
+        <div class="cv-card stat-card success">
+            <div class="cv-card-title">Total Bought</div>
+            <div class="stat-value">$@filteredTransactions.Where(t => t.Type == TransactionType.Buy).Sum(t => t.TotalAmount).ToString("N2")</div>
+        </div>
+        <div class="cv-card stat-card danger">
+            <div class="cv-card-title">Total Sold</div>
+            <div class="stat-value">$@filteredTransactions.Where(t => t.Type == TransactionType.Sell).Sum(t => t.TotalAmount).ToString("N2")</div>
+        </div>
+        <div class="cv-card stat-card info">
+            <div class="cv-card-title">Total Fees</div>
+            <div class="stat-value">$@filteredTransactions.Sum(t => t.Fee).ToString("N4")</div>
+        </div>
+    </div>
+
+    @if (filteredTransactions.Any())
+    {
+        <div class="cv-card">
+            <table class="cv-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Asset</th>
+                        <th style="text-align:right">Price</th>
+                        <th style="text-align:right">Quantity</th>
+                        <th style="text-align:right">Total</th>
+                        <th style="text-align:right">Fee</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var tx in filteredTransactions)
+                    {
+                        <tr>
+                            <td>
+                                <span class="cv-badge @(tx.Type == TransactionType.Buy ? "cv-badge-buy" : "cv-badge-sell")">
+                                    @tx.TypeDisplay
+                                </span>
+                            </td>
+                            <td>
+                                <div>
+                                    <div style="font-weight: 600;">@tx.Symbol.Replace("USDT", "")</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-secondary);">@tx.AssetName</div>
+                                </div>
+                            </td>
+                            <td class="price-cell">$@tx.PricePerUnit.ToString("N2")</td>
+                            <td style="text-align:right; font-variant-numeric: tabular-nums;">@tx.Quantity.ToString("N6")</td>
+                            <td class="price-cell" style="color: @tx.TypeColor; font-weight: 700;">
+                                @(tx.Type == TransactionType.Buy ? "-" : "+")$@tx.TotalAmount.ToString("N2")
+                            </td>
+                            <td style="text-align:right; color: var(--text-secondary); font-variant-numeric: tabular-nums;">
+                                $@tx.Fee.ToString("N4")
+                            </td>
+                            <td style="color: var(--text-secondary); font-size: 0.85rem; white-space: nowrap;">
+                                @tx.ExecutedAt.ToString("MMM dd, yyyy HH:mm")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="cv-card">
+            <div class="empty-state">
+                <div class="empty-state-icon"><i class="bi bi-clipboard2-data"></i></div>
+                <div class="empty-state-text">No transactions found</div>
+                <div class="empty-state-hint">@(typeFilter.HasValue || !string.IsNullOrEmpty(symbolFilter) ? "Try adjusting your filters" : "Execute a trade to see it here")</div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private List<TransactionDto> transactions;
+    private List<TransactionDto> filteredTransactions = new();
+    private int portfolioId;
+    private TransactionType? typeFilter;
+    private string symbolFilter = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+        await LoadTransactions();
+    }
+
+    private async Task LoadTransactions()
+    {
+        transactions = await TransactionService.GetTransactionsAsync(portfolioId);
+        ApplyFilters();
+    }
+
+    private void FilterByType(TransactionType? type)
+    {
+        typeFilter = type;
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        if (transactions == null) return;
+
+        var filtered = transactions.AsEnumerable();
+
+        if (typeFilter.HasValue)
+            filtered = filtered.Where(t => t.Type == typeFilter.Value);
+
+        if (!string.IsNullOrWhiteSpace(symbolFilter))
+            filtered = filtered.Where(t => t.Symbol.Contains(symbolFilter.ToUpperInvariant()));
+
+        filteredTransactions = filtered.ToList();
+    }
+}

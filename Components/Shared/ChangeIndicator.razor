@@ -1,0 +1,18 @@
+@* Displays percentage change with arrow indicator and color coding *@
+
+<span class="stat-change @(Value >= 0 ? "positive" : "negative")">
+    <i class="bi @(Value >= 0 ? "bi-caret-up-fill" : "bi-caret-down-fill")" style="font-size: 0.7rem;"></i>
+    @FormatValue()
+</span>
+
+@code {
+    [Parameter] public decimal Value { get; set; }
+    [Parameter] public bool ShowPercent { get; set; } = true;
+
+    private string FormatValue()
+    {
+        var formatted = Math.Abs(Value).ToString("N2");
+        var prefix = Value >= 0 ? "+" : "-";
+        return ShowPercent ? $"{prefix}{formatted}%" : $"{prefix}${formatted}";
+    }
+}

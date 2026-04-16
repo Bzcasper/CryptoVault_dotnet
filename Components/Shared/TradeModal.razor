@@ -1,0 +1,199 @@
+@* Trade modal for executing buy/sell transactions *@
+@inject ITransactionService TransactionService
+@inject IMarketDataService MarketData
+@inject IPortfolioService PortfolioService
+
+@if (IsVisible)
+{
+    <div class="cv-modal-overlay" @onclick="Close">
+        <div class="cv-modal" @onclick:stopPropagation="true">
+            <div class="cv-modal-header">
+                <span class="cv-modal-title">
+                    <i class="bi bi-arrow-left-right" style="margin-right: 8px;"></i>Trade @AssetSymbol
+                </span>
+                <button class="cv-modal-close" @onclick="Close">✕</button>
+            </div>
+
+            <div class="cv-modal-body">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div style="background: var(--danger-light); border: 1px solid var(--danger); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px; color: var(--danger); font-size: 0.85rem;">
+                        <i class="bi bi-exclamation-triangle"></i> @errorMessage
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div style="background: var(--success-light); border: 1px solid var(--success); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px; color: var(--success); font-size: 0.85rem;">
+                        <i class="bi bi-check-circle"></i> @successMessage
+                    </div>
+                }
+
+                <!-- Trade Type Tabs -->
+                <div class="trade-tabs">
+                    <button class="trade-tab buy @(tradeType == TransactionType.Buy ? "active" : "")"
+                            @onclick='() => tradeType = TransactionType.Buy'>
+                        BUY
+                    </button>
+                    <button class="trade-tab sell @(tradeType == TransactionType.Sell ? "active" : "")"
+                            @onclick='() => tradeType = TransactionType.Sell'>
+                        SELL
+                    </button>
+                </div>
+
+                <!-- Current Price -->
+                <div style="display: flex; justify-content: space-between; margin-bottom: 20px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Current Price</span>
+                    <span style="font-weight: 700; font-variant-numeric: tabular-nums;">
+                        $@currentPrice.ToString("N2")
+                    </span>
+                </div>
+
+                <!-- Quantity Input -->
+                <div class="form-group">
+                    <label class="cv-label">Quantity</label>
+                    <input type="number" class="cv-input" step="any" min="0.00000001"
+                           @bind="quantity" @bind:event="oninput" placeholder="0.00" />
+                </div>
+
+                <!-- Total Display -->
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding: 14px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                    <span style="color: var(--text-secondary);">Total</span>
+                    <span style="font-weight: 700; font-size: 1.1rem; color: var(--accent); font-variant-numeric: tabular-nums;">
+                        $@((quantity * currentPrice).ToString("N2"))
+                    </span>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.8rem; color: var(--text-secondary);">
+                    <span>Fee (0.1%)</span>
+                    <span>$@((quantity * currentPrice * 0.001m).ToString("N4"))</span>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 0.8rem; color: var(--text-secondary);">
+                    <span>Available Budget</span>
+                    <span>$@availableBudget.ToString("N2")</span>
+                </div>
+
+                <!-- Quick Amount Buttons -->
+                <div style="display: flex; gap: 8px; margin-bottom: 20px;">
+                    <button class="cv-btn cv-btn-ghost cv-btn-sm" style="flex:1" @onclick='() => SetPercentage(25)'>25%</button>
+                    <button class="cv-btn cv-btn-ghost cv-btn-sm" style="flex:1" @onclick='() => SetPercentage(50)'>50%</button>
+                    <button class="cv-btn cv-btn-ghost cv-btn-sm" style="flex:1" @onclick='() => SetPercentage(75)'>75%</button>
+                    <button class="cv-btn cv-btn-ghost cv-btn-sm" style="flex:1" @onclick='() => SetPercentage(100)'>100%</button>
+                </div>
+            </div>
+
+            <div class="cv-modal-footer">
+                <button class="cv-btn cv-btn-ghost" @onclick="Close">Cancel</button>
+                <button class="cv-btn @(tradeType == TransactionType.Buy ? "cv-btn-success" : "cv-btn-danger")"
+                        @onclick="ExecuteTrade" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span>Processing...</span>
+                    }
+                    else
+                    {
+                        <span>@(tradeType == TransactionType.Buy ? "Buy" : "Sell") @AssetSymbol?.Replace("USDT", "")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string AssetSymbol { get; set; }
+    [Parameter] public string AssetName { get; set; }
+    [Parameter] public string AssetImageUrl { get; set; }
+    [Parameter] public int PortfolioId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnTradeCompleted { get; set; }
+
+    private TransactionType tradeType = TransactionType.Buy;
+    private decimal quantity = 0m;
+    private decimal currentPrice = 0m;
+    private decimal availableBudget = 0m;
+    private string errorMessage;
+    private string successMessage;
+    private bool isProcessing = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && !string.IsNullOrEmpty(AssetSymbol))
+        {
+            errorMessage = null;
+            successMessage = null;
+            quantity = 0m;
+            currentPrice = await MarketData.GetCurrentPriceAsync(AssetSymbol);
+            var portfolio = await PortfolioService.GetPortfolioByIdAsync(PortfolioId);
+            availableBudget = portfolio?.CurrentBudget ?? 0m;
+        }
+    }
+
+    private void SetPercentage(int percent)
+    {
+        if (currentPrice <= 0) return;
+
+        if (tradeType == TransactionType.Buy)
+        {
+            var maxCost = availableBudget * percent / 100m;
+            quantity = Math.Round(maxCost / currentPrice, 8);
+        }
+        else
+        {
+            // For sell, this would need asset quantity — simplified here
+            quantity = Math.Round(quantity * percent / 100m, 8);
+        }
+    }
+
+    private async Task ExecuteTrade()
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        if (quantity <= 0)
+        {
+            errorMessage = "Please enter a valid quantity.";
+            return;
+        }
+
+        isProcessing = true;
+
+        try
+        {
+            // Refresh price right before trade
+            currentPrice = await MarketData.GetCurrentPriceAsync(AssetSymbol);
+
+            await TransactionService.ExecuteTradeAsync(
+                PortfolioId, AssetSymbol, AssetName, AssetImageUrl,
+                tradeType, quantity, currentPrice);
+
+            successMessage = $"Successfully {(tradeType == TransactionType.Buy ? "bought" : "sold")} {quantity:N8} {AssetSymbol.Replace("USDT", "")} at ${currentPrice:N2}";
+
+            // Refresh budget
+            var portfolio = await PortfolioService.GetPortfolioByIdAsync(PortfolioId);
+            availableBudget = portfolio?.CurrentBudget ?? 0m;
+
+            await OnTradeCompleted.InvokeAsync();
+            quantity = 0m;
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Trade failed: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+}

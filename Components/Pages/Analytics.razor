@@ -1,0 +1,171 @@
+@page "/analytics"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IPortfolioService PortfolioService
+@inject IAssetService AssetService
+@inject IMarketDataService MarketData
+@inject IJSRuntime JS
+
+<PageTitle>Analytics — CryptoVault</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Analytics</h1>
+        <div class="page-subtitle">Portfolio insights and performance analysis</div>
+    </div>
+    <button class="cv-btn cv-btn-ghost" @onclick="RefreshAnalytics">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+</div>
+
+@if (assets == null)
+{
+    <LoadingSpinner />
+}
+else if (!assets.Any())
+{
+    <div class="cv-card">
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="bi bi-graph-up-arrow"></i></div>
+            <div class="empty-state-text">No analytics data yet</div>
+            <div class="empty-state-hint">Buy some assets to see performance analytics</div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Performance Bar Chart + Allocation Donut -->
+    <div class="content-grid-equal" style="margin-bottom: 24px;">
+        <div class="cv-card animate-in">
+            <div class="cv-card-header">
+                <span class="cv-card-title">Performance by Asset (P&L %)</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+
+        <div class="cv-card animate-in" style="animation-delay: 100ms;">
+            <div class="cv-card-header">
+                <span class="cv-card-title">Portfolio Allocation</span>
+            </div>
+            <div class="chart-container" style="height: 260px;">
+                <canvas id="analyticsAllocationChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Ranking Table -->
+    <div class="cv-card animate-in" style="animation-delay: 200ms;">
+        <div class="cv-card-header">
+            <span class="cv-card-title">Asset Ranking</span>
+        </div>
+        <table class="cv-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Asset</th>
+                    <th style="text-align:right">Invested</th>
+                    <th style="text-align:right">Current Value</th>
+                    <th style="text-align:right">P&L ($)</th>
+                    <th style="text-align:right">P&L (%)</th>
+                    <th style="text-align:right">Allocation</th>
+                    <th style="text-align:right">Avg Buy Price</th>
+                    <th style="text-align:right">Current Price</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ int rank = 1; }
+                @foreach (var asset in assets.OrderByDescending(a => a.ProfitLossPercent))
+                {
+                    <tr>
+                        <td style="font-weight: 700; color: var(--accent);">@rank</td>
+                        <td>
+                            <div class="asset-cell">
+                                <img src="@(string.IsNullOrEmpty(asset.ImageUrl) ? "/images/fallback.png" : asset.ImageUrl)"
+                                     alt="" 
+                                     class="asset-icon"
+                                     onerror="this.onerror=null;this.src='/images/fallback.png';" />
+                                <div>
+                                    <div class="asset-symbol">@asset.Symbol.Replace("USDT", "")</div>
+                                    <div class="asset-name">@asset.Name</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="price-cell" style="color: var(--text-secondary);">$@asset.TotalInvested.ToString("N2")</td>
+                        <td class="price-cell">$@asset.CurrentValue.ToString("N2")</td>
+                        <td style="text-align:right">
+                            <span style="color: @(asset.ProfitLoss >= 0 ? "var(--success)" : "var(--danger)"); font-weight: 600; font-variant-numeric: tabular-nums;">
+                                @(asset.ProfitLoss >= 0 ? "+" : "")$@asset.ProfitLoss.ToString("N2")
+                            </span>
+                        </td>
+                        <td style="text-align:right"><ChangeIndicator Value="@asset.ProfitLossPercent" /></td>
+                        <td style="text-align:right; color: var(--accent); font-weight: 600;">@asset.AllocationPercent.ToString("N1")%</td>
+                        <td class="price-cell" style="color: var(--text-secondary);"><PriceDisplay Value="@asset.AverageBuyPrice" /></td>
+                        <td class="price-cell"><PriceDisplay Value="@asset.CurrentPrice" /></td>
+                    </tr>
+                    rank++;
+                }
+            </tbody>
+        </table>
+
+        <!-- Summary Row -->
+        <div style="display: flex; justify-content: space-between; padding: 16px; border-top: 2px solid var(--border-color); margin-top: 8px;">
+            <span style="font-weight: 700; color: var(--text-primary);">Total</span>
+            <div style="display: flex; gap: 40px;">
+                <span style="color: var(--text-secondary);">Invested: <strong style="color: var(--text-primary);">$@assets.Sum(a => a.TotalInvested).ToString("N2")</strong></span>
+                <span style="color: var(--text-secondary);">Value: <strong style="color: var(--accent);">$@assets.Sum(a => a.CurrentValue).ToString("N2")</strong></span>
+                <span style="color: var(--text-secondary);">P&L: <strong style="color: @(assets.Sum(a => a.ProfitLoss) >= 0 ? "var(--success)" : "var(--danger)");">
+                    @(assets.Sum(a => a.ProfitLoss) >= 0 ? "+" : "")$@assets.Sum(a => a.ProfitLoss).ToString("N2")
+                </strong></span>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<AssetDto> assets;
+    private int portfolioId;
+
+    private static readonly string[] ChartColors = {
+        "#F0B90B", "#0ECB81", "#1E90FF", "#F6465D", "#B659FF",
+        "#FF6B35", "#00D2FF", "#FFD700", "#FF1493", "#00FA9A"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+        await LoadAnalytics();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (assets != null && assets.Any())
+        {
+            // Performance Bar Chart
+            var perfLabels = assets.OrderByDescending(a => a.ProfitLossPercent).Select(a => a.Symbol.Replace("USDT", "")).ToArray();
+            var perfValues = assets.OrderByDescending(a => a.ProfitLossPercent).Select(a => (double)a.ProfitLossPercent).ToArray();
+            await JS.InvokeVoidAsync("createBarChart", "performanceChart", perfLabels, perfValues, null);
+
+            // Allocation Donut
+            var allocLabels = assets.OrderByDescending(a => a.CurrentValue).Select(a => a.Symbol.Replace("USDT", "")).ToArray();
+            var allocValues = assets.OrderByDescending(a => a.CurrentValue).Select(a => (double)a.AllocationPercent).ToArray();
+            var allocColors = assets.OrderByDescending(a => a.CurrentValue).Select((a, i) => ChartColors[i % ChartColors.Length]).ToArray();
+            await JS.InvokeVoidAsync("createAllocationChart", "analyticsAllocationChart", allocLabels, allocValues, allocColors);
+        }
+    }
+
+    private async Task LoadAnalytics()
+    {
+        assets = await AssetService.GetAssetDtosAsync(portfolioId);
+    }
+
+    private async Task RefreshAnalytics()
+    {
+        assets = null;
+        StateHasChanged();
+        await Task.Delay(200);
+        await LoadAnalytics();
+    }
+}

@@ -1,0 +1,57 @@
+@inject NavigationManager NavManager
+
+<div class="nav-brand">
+    <img src="/images/logo.png" alt="CryptoVault Logo" class="nav-brand-logo" style="width: 42px; height: 42px; border-radius: 12px; object-fit: cover; background: none; padding: 0;" />
+    <div>
+        <div class="nav-brand-text">CryptoVault</div>
+        <div class="nav-brand-subtitle">Portfolio Manager</div>
+    </div>
+</div>
+
+<div class="nav-section">
+    <div class="nav-section-label">Main</div>
+
+    <NavLink class="nav-link-custom" href="" Match="NavLinkMatch.All">
+        <i class="bi bi-grid-1x2-fill nav-icon"></i>
+        <span>Dashboard</span>
+    </NavLink>
+
+    <NavLink class="nav-link-custom" href="assets">
+        <i class="bi bi-coin nav-icon"></i>
+        <span>Assets</span>
+    </NavLink>
+
+    <NavLink class="nav-link-custom" href="market">
+        <i class="bi bi-globe nav-icon"></i>
+        <span>Market</span>
+    </NavLink>
+
+    <NavLink class="nav-link-custom" href="trade">
+        <i class="bi bi-currency-exchange nav-icon"></i>
+        <span>Trade</span>
+    </NavLink>
+
+    <NavLink class="nav-link-custom" href="transactions">
+        <i class="bi bi-arrow-left-right nav-icon"></i>
+        <span>Transactions</span>
+    </NavLink>
+</div>
+
+<div class="nav-section">
+    <div class="nav-section-label">Tools</div>
+
+    <NavLink class="nav-link-custom" href="watchlist">
+        <i class="bi bi-eye-fill nav-icon"></i>
+        <span>Watchlist</span>
+    </NavLink>
+
+    <NavLink class="nav-link-custom" href="analytics">
+        <i class="bi bi-graph-up-arrow nav-icon"></i>
+        <span>Analytics</span>
+    </NavLink>
+
+    <NavLink class="nav-link-custom" href="alerts">
+        <i class="bi bi-bell-fill nav-icon"></i>
+        <span>Alerts</span>
+    </NavLink>
+</div>

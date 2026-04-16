@@ -1,0 +1,279 @@
+@page "/"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IPortfolioService PortfolioService
+@inject IMarketDataService MarketData
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Dashboard — CryptoVault</PageTitle>
+
+@if (dashboard == null)
+{
+    <LoadingSpinner />
+}
+else
+{
+    <!-- Stats Grid -->
+    <div class="stats-grid animate-in">
+        <!-- Total Account Value -->
+        <div class="cv-card stat-card accent">
+            <div class="cv-card-title">Total Account Value</div>
+            <div class="stat-value">$@dashboard.TotalAccountValue.ToString("N2")</div>
+            <div class="stat-label">Initial: $@dashboard.InitialBudget.ToString("N2")</div>
+        </div>
+
+        <!-- Portfolio Value -->
+        <div class="cv-card stat-card @(dashboard.TotalProfitLoss >= 0 ? "success" : "danger")">
+            <div class="cv-card-title">Invested Value</div>
+            <div class="stat-value">$@dashboard.TotalPortfolioValue.ToString("N2")</div>
+            <ChangeIndicator Value="@dashboard.TotalProfitLossPercent" />
+        </div>
+
+        <!-- Available Budget -->
+        <div class="cv-card stat-card info">
+            <div class="cv-card-title">Available Budget</div>
+            <div class="stat-value">$@dashboard.AvailableBudget.ToString("N2")</div>
+            <div class="stat-label">Ready to invest</div>
+        </div>
+
+        <!-- P&L -->
+        <div class="cv-card stat-card @(dashboard.TotalProfitLoss >= 0 ? "success" : "danger")">
+            <div class="cv-card-title">Total P&L</div>
+            <div class="stat-value" style="color: @(dashboard.TotalProfitLoss >= 0 ? "var(--success)" : "var(--danger)")">
+                @(dashboard.TotalProfitLoss >= 0 ? "+" : "")$@dashboard.TotalProfitLoss.ToString("N2")
+            </div>
+            <div class="stat-label">@dashboard.TotalAssets assets · @dashboard.TotalTransactions trades</div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="content-grid">
+        <!-- Left: Holdings Table -->
+        <div class="cv-card animate-in" style="animation-delay: 100ms;">
+            <div class="cv-card-header">
+                <span class="cv-card-title">Holdings</span>
+                <button class="cv-btn cv-btn-ghost cv-btn-sm" @onclick="RefreshData">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+
+            @if (dashboard.Assets.Any())
+            {
+                <table class="cv-table">
+                    <thead>
+                        <tr>
+                            <th>Asset</th>
+                            <th style="text-align:right">Price</th>
+                            <th style="text-align:right">Holdings</th>
+                            <th style="text-align:right">Value</th>
+                            <th style="text-align:right">P&L</th>
+                            <th style="text-align:right">24h</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var asset in dashboard.Assets)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="asset-cell">
+                                        <img src="@(string.IsNullOrEmpty(asset.ImageUrl) ? "/images/fallback.png" : asset.ImageUrl)" alt="@asset.Symbol" class="asset-icon"
+                                             onerror="this.onerror=null;this.src='/images/fallback.png';" />
+                                        <div>
+                                            <div class="asset-symbol">@asset.Symbol.Replace("USDT", "")</div>
+                                            <div class="asset-name">@asset.Name</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="price-cell">
+                                    <PriceDisplay Value="@asset.CurrentPrice" />
+                                </td>
+                                <td style="text-align:right; font-variant-numeric: tabular-nums;">
+                                    @asset.Quantity.ToString("N6")
+                                </td>
+                                <td class="price-cell">$@asset.CurrentValue.ToString("N2")</td>
+                                <td style="text-align:right">
+                                    <div style="color: @(asset.ProfitLoss >= 0 ? "var(--success)" : "var(--danger)"); font-weight: 600; font-variant-numeric: tabular-nums;">
+                                        @(asset.ProfitLoss >= 0 ? "+" : "")$@asset.ProfitLoss.ToString("N2")
+                                    </div>
+                                    <div style="font-size: 0.75rem;">
+                                        <ChangeIndicator Value="@asset.ProfitLossPercent" />
+                                    </div>
+                                </td>
+                                <td style="text-align:right">
+                                    <ChangeIndicator Value="@asset.Change24hPercent" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="bi bi-bar-chart-line"></i></div>
+                    <div class="empty-state-text">No assets yet</div>
+                    <div class="empty-state-hint">Go to Assets page to buy your first cryptocurrency</div>
+                </div>
+            }
+        </div>
+
+        <!-- Right: Allocation Chart -->
+        <div class="cv-card animate-in" style="animation-delay: 200ms; display: flex; flex-direction: column;">
+            <div class="cv-card-header">
+                <span class="cv-card-title">Portfolio Allocation</span>
+            </div>
+            @if (dashboard.Allocations.Any())
+            {
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 300px;">
+                    <div class="chart-container" style="height: 280px; width: 100%;">
+                        <canvas id="allocationChart"></canvas>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="empty-state" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="empty-state-icon"><i class="bi bi-pie-chart"></i></div>
+                    <div class="empty-state-text">No allocation data</div>
+                    <div class="empty-state-hint">Buy assets to see your allocation</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Bottom Grid: Top/Worst Performers + Recent Transactions -->
+    <div class="content-grid-equal">
+        <!-- Top Performers -->
+        <div class="cv-card animate-in" style="animation-delay: 300ms;">
+            <div class="cv-card-header">
+                <span class="cv-card-title"><i class="bi bi-trophy-fill" style="color: var(--accent); margin-right: 6px;"></i> Top Performers</span>
+            </div>
+            @if (dashboard.TopPerformers.Any())
+            {
+                @foreach (var asset in dashboard.TopPerformers.Take(5))
+                {
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <img src="@(string.IsNullOrEmpty(asset.ImageUrl) ? "/images/fallback.png" : asset.ImageUrl)" alt="" style="width: 24px; height: 24px; border-radius: 50%; background: var(--bg-tertiary);"
+                                  onerror="this.onerror=null;this.src='/images/fallback.png';" />
+                            <span style="font-weight: 600;">@asset.Symbol.Replace("USDT", "")</span>
+                        </div>
+                        <ChangeIndicator Value="@asset.ProfitLossPercent" />
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-state" style="padding: 24px;">
+                    <div class="empty-state-hint">No performance data yet</div>
+                </div>
+            }
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="cv-card animate-in" style="animation-delay: 400ms;">
+            <div class="cv-card-header">
+                <span class="cv-card-title">Recent Transactions</span>
+            </div>
+            @if (dashboard.RecentTransactions.Any())
+            {
+                @foreach (var tx in dashboard.RecentTransactions.Take(5))
+                {
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="cv-badge @(tx.Type == TransactionType.Buy ? "cv-badge-buy" : "cv-badge-sell")">
+                                @tx.TypeDisplay
+                            </span>
+                            <div>
+                                <div style="font-weight: 600; font-size: 0.85rem;">@tx.Symbol.Replace("USDT", "")</div>
+                                <div style="font-size: 0.72rem; color: var(--text-tertiary);">@tx.ExecutedAt.ToString("MMM dd, HH:mm")</div>
+                            </div>
+                        </div>
+                        <div style="text-align: right; font-variant-numeric: tabular-nums;">
+                            <div style="font-weight: 600; font-size: 0.85rem;">$@tx.TotalAmount.ToString("N2")</div>
+                            <div style="font-size: 0.72rem; color: var(--text-secondary);">@tx.Quantity.ToString("N6")</div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-state" style="padding: 24px;">
+                    <div class="empty-state-hint">No transactions yet</div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private PortfolioDashboardDto dashboard;
+    private int portfolioId;
+    private System.Timers.Timer _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+        await LoadDashboard();
+
+        _timer = new System.Timers.Timer(2000);
+        _timer.Elapsed += async (s, e) => {
+            try {
+                await InvokeAsync(async () => {
+                    await LoadDashboard();
+                    StateHasChanged();
+                    if (dashboard?.Allocations?.Any() == true) {
+                        await JS.InvokeVoidAsync("updateAllocationChart", "allocationChart", 
+                            dashboard.Allocations.Select(a => a.Symbol).ToArray(),
+                            dashboard.Allocations.Select(a => (double)a.Percentage).ToArray(),
+                            dashboard.Allocations.Select(a => a.Color).ToArray()
+                        );
+                    }
+                });
+            } catch { /* Suppress EF Core concurrent read exceptions */ }
+        };
+        _timer.Start();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && dashboard?.Allocations?.Any() == true)
+        {
+            var labels = dashboard.Allocations.Select(a => a.Symbol).ToArray();
+            var values = dashboard.Allocations.Select(a => (double)a.Percentage).ToArray();
+            var colors = dashboard.Allocations.Select(a => a.Color).ToArray();
+
+            await JS.InvokeVoidAsync("createAllocationChart", "allocationChart", labels, values, colors);
+        }
+    }
+
+    private async Task LoadDashboard()
+    {
+        dashboard = await PortfolioService.GetDashboardDataAsync(portfolioId);
+    }
+
+    private async Task RefreshData()
+    {
+        dashboard = null;
+        StateHasChanged();
+        await Task.Delay(300); // Brief loading indicator
+        await LoadDashboard();
+        StateHasChanged();
+        if (dashboard?.Allocations?.Any() == true)
+        {
+            var labels = dashboard.Allocations.Select(a => a.Symbol).ToArray();
+            var values = dashboard.Allocations.Select(a => (double)a.Percentage).ToArray();
+            var colors = dashboard.Allocations.Select(a => a.Color).ToArray();
+
+            await JS.InvokeVoidAsync("createAllocationChart", "allocationChart", labels, values, colors);
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}

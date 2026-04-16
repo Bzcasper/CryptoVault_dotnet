@@ -1,0 +1,76 @@
+@inherits LayoutComponentBase
+@inject IPortfolioService PortfolioService
+@inject IMarketDataService MarketData
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-bar">
+            <div class="top-bar-left">
+                <div class="portfolio-ticker">
+                    <span>Portfolio Value:</span>
+                    <span class="value">$@portfolioValue.ToString("N2")</span>
+                </div>
+            </div>
+            <div class="top-bar-right">
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    <span>LIVE</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            @Body
+        </div>
+    </main>
+</div>
+
+
+
+@implements IDisposable
+
+@code {
+    private decimal portfolioValue = 0m;
+    private System.Timers.Timer _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPortfolioValue();
+
+        _timer = new System.Timers.Timer(2000);
+        _timer.Elapsed += async (s, e) => {
+            try {
+                await InvokeAsync(async () => {
+                    await LoadPortfolioValue();
+                    StateHasChanged();
+                });
+            } catch { /* Suppress EF concurrency */ }
+        };
+        _timer.Start();
+    }
+
+    private async Task LoadPortfolioValue()
+    {
+        try
+        {
+            var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+            var value = await PortfolioService.GetTotalPortfolioValueAsync(portfolio.Id);
+            portfolioValue = value + portfolio.CurrentBudget;
+        }
+        catch
+        {
+            if (portfolioValue == 0m)
+                portfolioValue = 10000m;
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}

@@ -1,0 +1,34 @@
+@* Reusable component for displaying price with color coding *@
+
+<span class="tabular-nums @GetColorClass()" style="font-weight: @Weight">
+    @if (ShowDollar)
+    {
+        <span>$</span>
+    }
+    @FormatPrice()
+</span>
+
+@code {
+    [Parameter] public decimal Value { get; set; }
+    [Parameter] public bool ShowDollar { get; set; } = true;
+    [Parameter] public bool ColorCode { get; set; } = false;
+    [Parameter] public string Weight { get; set; } = "600";
+    [Parameter] public int Decimals { get; set; } = 2;
+
+    private string GetColorClass()
+    {
+        if (!ColorCode) return "";
+        return Value >= 0 ? "text-profit" : "text-loss";
+    }
+
+    private string FormatPrice()
+    {
+        if (Value >= 1000m)
+            return Value.ToString($"N{Decimals}");
+        if (Value >= 1m)
+            return Value.ToString($"N{Math.Max(Decimals, 2)}");
+        if (Value >= 0.01m)
+            return Value.ToString("N4");
+        return Value.ToString("N8");
+    }
+}

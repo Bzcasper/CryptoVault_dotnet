@@ -1,0 +1,260 @@
+@page "/assets"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IPortfolioService PortfolioService
+@inject IAssetService AssetService
+@inject IMarketDataService MarketData
+@implements IDisposable
+
+<PageTitle>Assets — CryptoVault</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Assets</h1>
+        <div class="page-subtitle">Manage your cryptocurrency holdings</div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <button class="cv-btn cv-btn-ghost" @onclick="RefreshAssets">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+        <button class="cv-btn cv-btn-primary" @onclick="OpenSearchModal">
+            <i class="bi bi-plus-lg"></i> Buy Asset
+        </button>
+    </div>
+</div>
+
+@if (assets == null)
+{
+    <LoadingSpinner />
+}
+else if (!assets.Any())
+{
+    <div class="cv-card">
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="bi bi-briefcase"></i></div>
+            <div class="empty-state-text">Your portfolio is empty</div>
+            <div class="empty-state-hint">Search and buy your first cryptocurrency to get started</div>
+            <button class="cv-btn cv-btn-primary" style="margin-top: 20px;" @onclick="OpenSearchModal">
+                <i class="bi bi-search"></i> Search Assets
+            </button>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Summary Stats -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="cv-card stat-card accent">
+            <div class="cv-card-title">Total Holdings</div>
+            <div class="stat-value">@assets.Count</div>
+            <div class="stat-label">Active assets</div>
+        </div>
+        <div class="cv-card stat-card success">
+            <div class="cv-card-title">Total Value</div>
+            <div class="stat-value">$@assets.Sum(a => a.CurrentValue).ToString("N2")</div>
+        </div>
+        <div class="cv-card stat-card @(assets.Sum(a => a.ProfitLoss) >= 0 ? "success" : "danger")">
+            <div class="cv-card-title">Total P&L</div>
+            <div class="stat-value" style="color: @(assets.Sum(a => a.ProfitLoss) >= 0 ? "var(--success)" : "var(--danger)")">
+                @(assets.Sum(a => a.ProfitLoss) >= 0 ? "+" : "")$@assets.Sum(a => a.ProfitLoss).ToString("N2")
+            </div>
+        </div>
+    </div>
+
+    <!-- Sort Controls -->
+    <div class="filters-bar">
+        <button class="filter-chip @(sortBy == "value" ? "active" : "")" @onclick='() => SortAssets("value")'>
+            By Value
+        </button>
+        <button class="filter-chip @(sortBy == "pnl" ? "active" : "")" @onclick='() => SortAssets("pnl")'>
+            By P&L
+        </button>
+        <button class="filter-chip @(sortBy == "change" ? "active" : "")" @onclick='() => SortAssets("change")'>
+            By 24h Change
+        </button>
+        <button class="filter-chip @(sortBy == "name" ? "active" : "")" @onclick='() => SortAssets("name")'>
+            By Name
+        </button>
+    </div>
+
+    <!-- Assets Table -->
+    <div class="cv-card">
+        <table class="cv-table">
+            <thead>
+                <tr>
+                    <th>Asset</th>
+                    <th style="text-align:right">Current Price</th>
+                    <th style="text-align:right">Avg Buy Price</th>
+                    <th style="text-align:right">Quantity</th>
+                    <th style="text-align:right">Value</th>
+                    <th style="text-align:right">P&L</th>
+                    <th style="text-align:right">24h Change</th>
+                    <th style="text-align:right">Allocation</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var asset in sortedAssets)
+                {
+                    <tr>
+                        <td>
+                            <div class="asset-cell">
+                                <img src="@(string.IsNullOrEmpty(asset.ImageUrl) ? "/images/fallback.png" : asset.ImageUrl)"
+                                     alt="@asset.Symbol" 
+                                     class="asset-icon"
+                                     onerror="this.onerror=null;this.src='/images/fallback.png';" />
+                                <div>
+                                    <div class="asset-symbol">@asset.Symbol.Replace("USDT", "")</div>
+                                    <div class="asset-name">@asset.Name</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="price-cell"><PriceDisplay Value="@asset.CurrentPrice" /></td>
+                        <td class="price-cell" style="color: var(--text-secondary)">
+                            <PriceDisplay Value="@asset.AverageBuyPrice" />
+                        </td>
+                        <td style="text-align:right; font-variant-numeric: tabular-nums;">@asset.Quantity.ToString("N6")</td>
+                        <td class="price-cell">$@asset.CurrentValue.ToString("N2")</td>
+                        <td style="text-align:right">
+                            <div style="color: @(asset.ProfitLoss >= 0 ? "var(--success)" : "var(--danger)"); font-weight: 600; font-variant-numeric: tabular-nums;">
+                                @(asset.ProfitLoss >= 0 ? "+" : "")$@asset.ProfitLoss.ToString("N2")
+                            </div>
+                            <ChangeIndicator Value="@asset.ProfitLossPercent" />
+                        </td>
+                        <td style="text-align:right"><ChangeIndicator Value="@asset.Change24hPercent" /></td>
+                        <td style="text-align:right">
+                            <span style="font-weight: 600; color: var(--accent);">@asset.AllocationPercent.ToString("N1")%</span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="cv-btn cv-btn-success cv-btn-sm" @onclick="() => OpenBuyModal(asset)">Buy</button>
+                                <button class="cv-btn cv-btn-danger cv-btn-sm" @onclick="() => OpenSellModal(asset)">Sell</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<!-- Search Modal -->
+<AssetSearchModal IsVisible="@showSearchModal"
+                  OnClose="CloseSearchModal"
+                  OnAssetSelected="OnAssetSelected" />
+
+<!-- Trade Modal -->
+<TradeModal IsVisible="@showTradeModal"
+            AssetSymbol="@tradeSymbol"
+            AssetName="@tradeName"
+            AssetImageUrl="@tradeImageUrl"
+            PortfolioId="@portfolioId"
+            OnClose="CloseTradeModal"
+            OnTradeCompleted="OnTradeCompleted" />
+
+@code {
+    private List<AssetDto> assets;
+    private List<AssetDto> sortedAssets = new();
+    private int portfolioId;
+    private string sortBy = "value";
+
+    // Search modal state
+    private bool showSearchModal = false;
+
+    private System.Timers.Timer _timer;
+
+    // Trade modal state
+    private bool showTradeModal = false;
+    private string tradeSymbol;
+    private string tradeName;
+    private string tradeImageUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+        await LoadAssets();
+
+        _timer = new System.Timers.Timer(2000);
+        _timer.Elapsed += async (s, e) => {
+            try {
+                await InvokeAsync(async () => {
+                    await LoadAssets();
+                    StateHasChanged();
+                });
+            } catch { /* Suppress EF exception */ }
+        };
+        _timer.Start();
+    }
+
+    private async Task LoadAssets()
+    {
+        assets = await AssetService.GetAssetDtosAsync(portfolioId);
+        SortAssets(sortBy);
+    }
+
+    private void SortAssets(string by)
+    {
+        sortBy = by;
+        sortedAssets = sortBy switch
+        {
+            "value" => assets.OrderByDescending(a => a.CurrentValue).ToList(),
+            "pnl" => assets.OrderByDescending(a => a.ProfitLossPercent).ToList(),
+            "change" => assets.OrderByDescending(a => a.Change24hPercent).ToList(),
+            "name" => assets.OrderBy(a => a.Name).ToList(),
+            _ => assets.ToList()
+        };
+    }
+
+    private async Task RefreshAssets()
+    {
+        assets = null;
+        StateHasChanged();
+        await Task.Delay(200);
+        await LoadAssets();
+    }
+
+    // Search Modal
+    private void OpenSearchModal() => showSearchModal = true;
+    private void CloseSearchModal() => showSearchModal = false;
+
+    private void OnAssetSelected(MarketAssetDto asset)
+    {
+        showSearchModal = false;
+        tradeSymbol = asset.Symbol;
+        tradeName = asset.DisplayName;
+        tradeImageUrl = asset.ImageUrl;
+        showTradeModal = true;
+    }
+
+    // Trade Modal
+    private void OpenBuyModal(AssetDto asset)
+    {
+        tradeSymbol = asset.Symbol;
+        tradeName = asset.Name;
+        tradeImageUrl = asset.ImageUrl;
+        showTradeModal = true;
+    }
+
+    private void OpenSellModal(AssetDto asset)
+    {
+        tradeSymbol = asset.Symbol;
+        tradeName = asset.Name;
+        tradeImageUrl = asset.ImageUrl;
+        showTradeModal = true;
+    }
+
+    private void CloseTradeModal() => showTradeModal = false;
+
+    private async Task OnTradeCompleted()
+    {
+        await LoadAssets();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}

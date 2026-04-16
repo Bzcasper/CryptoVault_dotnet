@@ -1,0 +1,248 @@
+@page "/alerts"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IPortfolioService PortfolioService
+@inject IAlertService AlertService
+@inject IMarketDataService MarketData
+
+<PageTitle>Alerts — CryptoVault</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Price Alerts</h1>
+        <div class="page-subtitle">Get notified when prices reach your targets</div>
+    </div>
+    <button class="cv-btn cv-btn-primary" @onclick="() => showCreateModal = true">
+        <i class="bi bi-bell-fill"></i> New Alert
+    </button>
+</div>
+
+@if (alerts == null)
+{
+    <LoadingSpinner />
+}
+else
+{
+    <!-- Filters -->
+    <div class="filters-bar">
+        <button class="filter-chip @(filter == "active" ? "active" : "")" @onclick='() => filter = "active"'>
+            <i class="bi bi-bell"></i> Active (@activeAlerts.Count)
+        </button>
+        <button class="filter-chip @(filter == "triggered" ? "active" : "")" @onclick='() => filter = "triggered"'>
+            <i class="bi bi-bell-fill"></i> Triggered (@triggeredAlerts.Count)
+        </button>
+        <button class="filter-chip @(filter == "all" ? "active" : "")" @onclick='() => filter = "all"'>
+            All (@alerts.Count)
+        </button>
+    </div>
+
+    @if (GetDisplayAlerts().Any())
+    {
+        <div class="cv-card">
+            <table class="cv-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Asset</th>
+                        <th>Condition</th>
+                        <th style="text-align:right">Target Price</th>
+                        <th style="text-align:right">Current Price</th>
+                        <th style="text-align:right">Distance</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var alert in GetDisplayAlerts())
+                    {
+                        var currentPrice = GetCurrentPrice(alert.Symbol);
+                        var distance = currentPrice > 0 ? ((alert.TargetPrice - currentPrice) / currentPrice) * 100m : 0m;
+                        <tr>
+                            <td>
+                                @if (alert.IsTriggered)
+                                {
+                                    <span class="cv-badge cv-badge-triggered">Triggered</span>
+                                }
+                                else if (alert.IsActive)
+                                {
+                                    <span class="cv-badge cv-badge-active">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="cv-badge" style="background: var(--bg-tertiary); color: var(--text-tertiary);">Inactive</span>
+                                }
+                            </td>
+                            <td style="font-weight: 600;">@alert.Symbol.Replace("USDT", "")</td>
+                            <td>
+                                <span style="color: @(alert.Type == AlertType.PriceAbove ? "var(--success)" : "var(--danger)")">
+                                    <i class="bi @(alert.Type == AlertType.PriceAbove ? "bi-arrow-up" : "bi-arrow-down")"></i>
+                                    @(alert.Type == AlertType.PriceAbove ? "Price Above" : "Price Below")
+                                </span>
+                            </td>
+                            <td class="price-cell">$@alert.TargetPrice.ToString("N2")</td>
+                            <td class="price-cell">$@currentPrice.ToString("N2")</td>
+                            <td style="text-align:right">
+                                <ChangeIndicator Value="@distance" />
+                            </td>
+                            <td style="color: var(--text-secondary); font-size: 0.85rem;">
+                                @alert.CreatedAt.ToString("MMM dd, HH:mm")
+                                @if (alert.TriggeredAt.HasValue)
+                                {
+                                    <div style="font-size: 0.72rem; color: var(--warning);">
+                                        Triggered: @alert.TriggeredAt.Value.ToString("MMM dd, HH:mm")
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <button class="cv-btn cv-btn-ghost cv-btn-sm" @onclick="() => DeleteAlert(alert.Id)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="cv-card">
+            <div class="empty-state">
+                <div class="empty-state-icon"><i class="bi bi-bell-slash"></i></div>
+                <div class="empty-state-text">No @filter alerts</div>
+                <div class="empty-state-hint">Create a price alert to get notified</div>
+            </div>
+        </div>
+    }
+}
+
+<!-- Create Alert Modal -->
+@if (showCreateModal)
+{
+    <div class="cv-modal-overlay" @onclick="() => showCreateModal = false">
+        <div class="cv-modal" @onclick:stopPropagation="true" style="max-width: 420px;">
+            <div class="cv-modal-header">
+                <span class="cv-modal-title"><i class="bi bi-bell-fill" style="margin-right: 8px;"></i>Create Alert</span>
+                <button class="cv-modal-close" @onclick="() => showCreateModal = false">✕</button>
+            </div>
+            <div class="cv-modal-body">
+                @if (!string.IsNullOrEmpty(createError))
+                {
+                    <div style="background: var(--danger-light); border: 1px solid var(--danger); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px; color: var(--danger); font-size: 0.85rem;">
+                        @createError
+                    </div>
+                }
+
+                <div class="form-group">
+                    <label class="cv-label">Symbol (e.g., BTCUSDT)</label>
+                    <input type="text" class="cv-input" @bind="newSymbol" placeholder="BTCUSDT" />
+                </div>
+
+                <div class="form-group">
+                    <label class="cv-label">Alert Type</label>
+                    <select class="cv-input cv-select" @bind="newAlertType">
+                        <option value="@AlertType.PriceAbove">Price Goes Above</option>
+                        <option value="@AlertType.PriceBelow">Price Goes Below</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="cv-label">Target Price ($)</label>
+                    <input type="number" class="cv-input" step="any" min="0" @bind="newTargetPrice" placeholder="0.00" />
+                </div>
+            </div>
+            <div class="cv-modal-footer">
+                <button class="cv-btn cv-btn-ghost" @onclick="() => showCreateModal = false">Cancel</button>
+                <button class="cv-btn cv-btn-primary" @onclick="CreateAlert">Create Alert</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Alert> alerts;
+    private List<Alert> activeAlerts = new();
+    private List<Alert> triggeredAlerts = new();
+    private Dictionary<string, decimal> prices = new();
+    private int portfolioId;
+    private string filter = "active";
+
+    private List<Alert> GetDisplayAlerts() => filter switch
+    {
+        "active" => activeAlerts,
+        "triggered" => triggeredAlerts,
+        _ => alerts ?? new List<Alert>()
+    };
+
+    // Create modal
+    private bool showCreateModal = false;
+    private string newSymbol = "BTCUSDT";
+    private AlertType newAlertType = AlertType.PriceAbove;
+    private decimal newTargetPrice = 0;
+    private string createError = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+        await LoadAlerts();
+    }
+
+    private async Task LoadAlerts()
+    {
+        alerts = await AlertService.GetAllAlertsAsync(portfolioId);
+        activeAlerts = alerts.Where(a => a.IsActive && !a.IsTriggered).ToList();
+        triggeredAlerts = alerts.Where(a => a.IsTriggered).ToList();
+
+        // Fetch current prices for all alert symbols
+        var symbols = alerts.Select(a => a.Symbol).Distinct();
+        foreach (var symbol in symbols)
+        {
+            prices[symbol] = await MarketData.GetCurrentPriceAsync(symbol);
+        }
+    }
+
+    private decimal GetCurrentPrice(string symbol)
+    {
+        return prices.TryGetValue(symbol, out var price) ? price : 0m;
+    }
+
+    private async Task CreateAlert()
+    {
+        createError = "";
+
+        if (string.IsNullOrWhiteSpace(newSymbol))
+        {
+            createError = "Please enter a symbol.";
+            return;
+        }
+
+        if (newTargetPrice <= 0)
+        {
+            createError = "Please enter a valid target price.";
+            return;
+        }
+
+        try
+        {
+            var symbol = newSymbol.ToUpperInvariant();
+            if (!symbol.EndsWith("USDT")) symbol += "USDT";
+
+            await AlertService.CreateAlertAsync(portfolioId, symbol, newAlertType, newTargetPrice);
+            showCreateModal = false;
+            newSymbol = "BTCUSDT";
+            newTargetPrice = 0;
+            await LoadAlerts();
+        }
+        catch (Exception ex)
+        {
+            createError = ex.Message;
+        }
+    }
+
+    private async Task DeleteAlert(int id)
+    {
+        await AlertService.DeleteAlertAsync(id);
+        await LoadAlerts();
+    }
+}

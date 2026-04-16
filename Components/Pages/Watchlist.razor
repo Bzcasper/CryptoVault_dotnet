@@ -1,0 +1,167 @@
+@page "/watchlist"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IPortfolioService PortfolioService
+@inject IWatchlistService WatchlistService
+@inject IMarketDataService MarketData
+
+<PageTitle>Watchlist — CryptoVault</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Watchlist</h1>
+        <div class="page-subtitle">Track assets you're interested in</div>
+    </div>
+    <button class="cv-btn cv-btn-primary" @onclick="() => showSearchModal = true">
+        <i class="bi bi-plus-lg"></i> Add Asset
+    </button>
+</div>
+
+@if (watchlistData == null)
+{
+    <LoadingSpinner />
+}
+else if (!watchlistData.Any())
+{
+    <div class="cv-card">
+        <div class="empty-state">
+            <div class="empty-state-icon"><i class="bi bi-binoculars"></i></div>
+            <div class="empty-state-text">Your watchlist is empty</div>
+            <div class="empty-state-hint">Add assets to track their prices without buying</div>
+            <button class="cv-btn cv-btn-primary" style="margin-top: 20px;" @onclick="() => showSearchModal = true">
+                <i class="bi bi-search"></i> Search Assets
+            </button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="cv-card">
+        <table class="cv-table">
+            <thead>
+                <tr>
+                    <th>Asset</th>
+                    <th style="text-align:right">Price</th>
+                    <th style="text-align:right">24h Change</th>
+                    <th style="text-align:right">24h Volume</th>
+                    <th style="text-align:right">Added</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in watchlistData)
+                {
+                    <tr>
+                        <td>
+                            <div class="asset-cell">
+                                <img src="@(string.IsNullOrEmpty(item.Item.ImageUrl) ? "/images/fallback.png" : item.Item.ImageUrl)"
+                                     alt="@item.Item.Symbol" 
+                                     class="asset-icon"
+                                     onerror="this.onerror=null;this.src='/images/fallback.png';" />
+                                <div>
+                                    <div class="asset-symbol">@item.Item.Symbol.Replace("USDT", "")</div>
+                                    <div class="asset-name">@item.Item.Name</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="price-cell">
+                            <PriceDisplay Value="@(item.MarketData != null ? item.MarketData.Price : 0m)" />
+                        </td>
+                        <td style="text-align:right">
+                            <ChangeIndicator Value="@(item.MarketData?.PriceChangePercent ?? 0)" />
+                        </td>
+                        <td style="text-align:right; color: var(--text-secondary); font-variant-numeric: tabular-nums;">
+                            $@((item.MarketData?.QuoteVolume ?? 0).ToString("N0"))
+                        </td>
+                        <td style="text-align:right; color: var(--text-secondary); font-size: 0.85rem;">
+                            @item.Item.AddedAt.ToString("MMM dd")
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="cv-btn cv-btn-success cv-btn-sm" @onclick="() => BuyFromWatchlist(item)">
+                                    Buy
+                                </button>
+                                <button class="cv-btn cv-btn-ghost cv-btn-sm" @onclick="() => RemoveFromWatchlist(item.Item.Id)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<!-- Search Modal -->
+<AssetSearchModal IsVisible="@showSearchModal"
+                  OnClose="() => showSearchModal = false"
+                  OnAssetSelected="OnAssetSelected" />
+
+<!-- Trade Modal -->
+<TradeModal IsVisible="@showTradeModal"
+            AssetSymbol="@tradeSymbol"
+            AssetName="@tradeName"
+            AssetImageUrl="@tradeImageUrl"
+            PortfolioId="@portfolioId"
+            OnClose="() => showTradeModal = false"
+            OnTradeCompleted="OnTradeCompleted" />
+
+@code {
+    private List<WatchlistDataItem> watchlistData;
+    private int portfolioId;
+    private bool showSearchModal = false;
+    private bool showTradeModal = false;
+    private string tradeSymbol, tradeName, tradeImageUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+        await LoadWatchlist();
+    }
+
+    private async Task LoadWatchlist()
+    {
+        var items = await WatchlistService.GetWatchlistAsync(portfolioId);
+        watchlistData = new List<WatchlistDataItem>();
+
+        foreach (var item in items)
+        {
+            var market = await MarketData.GetMarketDataAsync(item.Symbol);
+            watchlistData.Add(new WatchlistDataItem { Item = item, MarketData = market });
+        }
+    }
+
+    private async Task OnAssetSelected(MarketAssetDto asset)
+    {
+        showSearchModal = false;
+        await WatchlistService.AddToWatchlistAsync(portfolioId, asset.Symbol, asset.DisplayName, asset.ImageUrl);
+        await LoadWatchlist();
+    }
+
+    private async Task RemoveFromWatchlist(int id)
+    {
+        await WatchlistService.RemoveFromWatchlistAsync(id);
+        await LoadWatchlist();
+    }
+
+    private void BuyFromWatchlist(WatchlistDataItem item)
+    {
+        tradeSymbol = item.Item.Symbol;
+        tradeName = item.Item.Name;
+        tradeImageUrl = item.Item.ImageUrl;
+        showTradeModal = true;
+    }
+
+    private async Task OnTradeCompleted()
+    {
+        await LoadWatchlist();
+    }
+
+    private class WatchlistDataItem
+    {
+        public WatchlistItem Item { get; set; }
+        public MarketAssetDto MarketData { get; set; }
+    }
+}

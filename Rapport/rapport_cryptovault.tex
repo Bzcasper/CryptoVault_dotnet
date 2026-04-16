@@ -1,0 +1,864 @@
+% ================================================================
+% CryptoVault — Rapport Académique
+% Projet .NET — Gestion de Portefeuille d'Investissement
+% ================================================================
+\documentclass[12pt,a4paper]{article}
+
+% ====== Packages ======
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{amsmath}
+\usepackage{tcolorbox}
+\usepackage{longtable}
+\usepackage{tikz}
+\usetikzlibrary{shapes.multipart, shapes.geometric, arrows.meta, positioning, fit, calc, backgrounds}
+
+% ====== Page Geometry ======
+\geometry{
+    top=2.5cm,
+    bottom=2.5cm,
+    left=2.5cm,
+    right=2.5cm
+}
+
+% ====== Colors ======
+\definecolor{cvgold}{HTML}{F0B90B}
+\definecolor{cvdark}{HTML}{0B0E11}
+\definecolor{cvgray}{HTML}{1E2329}
+\definecolor{cvgreen}{HTML}{0ECB81}
+\definecolor{cvred}{HTML}{F6465D}
+\definecolor{cvblue}{HTML}{1E90FF}
+\definecolor{codebg}{HTML}{F5F5F5}
+
+% ====== Hyperref ======
+\hypersetup{
+    colorlinks=true,
+    linkcolor=cvblue,
+    urlcolor=cvblue,
+    citecolor=cvblue,
+    pdfauthor={},
+    pdftitle={CryptoVault - Rapport de Projet .NET},
+    pdfsubject={Gestion de Portefeuille Crypto}
+}
+
+% ====== Code Listings ======
+\lstdefinestyle{csharpstyle}{
+    language=[Sharp]C,
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{cvblue}\bfseries,
+    stringstyle=\color{cvgreen},
+    commentstyle=\color{gray}\itshape,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=8pt,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{lightgray},
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b
+}
+\lstset{style=csharpstyle}
+
+% ====== Headers & Footers ======
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize CryptoVault --- Projet .NET}
+\fancyhead[R]{\footnotesize\thepage}
+\fancyfoot[C]{\footnotesize Rapport Académique}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% ====== Title Formatting ======
+\titleformat{\section}{\Large\bfseries\color{cvblue}}{}{0em}{\thesection\quad}
+\titleformat{\subsection}{\large\bfseries}{}{0em}{\thesubsection\quad}
+\titleformat{\subsubsection}{\normalsize\bfseries}{}{0em}{\thesubsubsection\quad}
+
+% ====== Custom Box ======
+\newtcolorbox{infobox}[1][]{
+    colback=cvblue!5,
+    colframe=cvblue!60,
+    fonttitle=\bfseries,
+    title=#1,
+    arc=3mm
+}
+
+\newtcolorbox{techbox}[1][]{
+    colback=cvgold!5,
+    colframe=cvgold!70,
+    fonttitle=\bfseries,
+    title=#1,
+    arc=3mm
+}
+
+% ================================================================
+% DOCUMENT
+% ================================================================
+\begin{document}
+
+% ====== PAGE DE GARDE ======
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+
+    {\Huge\bfseries CryptoVault}\\[0.5cm]
+    {\Large\color{cvblue} Plateforme de Gestion de Portefeuille}\\[0.3cm]
+    {\Large\color{cvblue} d'Investissement en Cryptomonnaies}\\[2cm]
+
+    \rule{\textwidth}{1pt}\\[0.8cm]
+
+    {\large\bfseries Rapport de Projet --- Module .NET}\\[0.5cm]
+    {\large Année Universitaire 2025--2026}\\[0.3cm]
+    {\large Semestre 2}\\[1.5cm]
+
+    \rule{\textwidth}{1pt}\\[1cm]
+
+    \begin{tabular}{rl}
+        \textbf{Technologies :} & .NET 10, Blazor Server, EF Core 10, SQLite \\[0.3cm]
+        \textbf{API Externe :} & Binance Public API (REST + WebSocket) \\[0.3cm]
+        \textbf{Architecture :} & Clean Architecture (Layered) \\[0.3cm]
+        \textbf{Design :} & Interface Dark Theme inspirée de Binance \\
+    \end{tabular}
+
+    \vfill
+    {\small\color{gray} Ce rapport présente la conception, l'implémentation et l'évaluation\\
+    d'une application professionnelle de gestion de portefeuille crypto.}
+\end{titlepage}
+
+% ====== TABLE DES MATIÈRES ======
+\tableofcontents
+\newpage
+
+% ================================================================
+\section{Introduction}
+% ================================================================
+
+\subsection{Contexte du projet}
+
+Le marché des cryptomonnaies est devenu un pilier majeur de la finance moderne, avec une capitalisation dépassant les 2 000 milliards de dollars. La gestion efficace d'un portefeuille d'investissement en actifs numériques nécessite des outils professionnels capables de fournir des données en temps réel, des analyses de performance, et une exécution rapide des transactions.
+
+\textbf{CryptoVault} est une application web complète de gestion de portefeuille d'investissement en cryptomonnaies, développée dans le cadre du module .NET. Elle s'inspire des plateformes de trading professionnelles comme Binance, avec un accent sur la qualité du code, l'architecture logicielle, et l'expérience utilisateur.
+
+\subsection{Objectifs}
+
+\begin{enumerate}[leftmargin=2cm]
+    \item \textbf{Données en temps réel} --- Intégration de l'API publique Binance (REST + WebSocket) pour des prix, volumes et variations actualisés en continu.
+    \item \textbf{Architecture propre} --- Application des principes SOLID et de la Clean Architecture avec séparation en couches (Domain, Application, Infrastructure, UI).
+    \item \textbf{Simulation de trading} --- Système complet d'achat/vente avec gestion de budget, calcul de frais (0.1\%), et prix moyen pondéré.
+    \item \textbf{Interface professionnelle} --- Dark theme premium avec effets glassmorphism, animations, graphiques Chart.js, et composants réutilisables.
+    \item \textbf{Fonctionnalités avancées} --- Watchlist, alertes de prix, analytics de performance, historique des transactions.
+\end{enumerate}
+
+\subsection{Technologies utilisées}
+
+\begin{techbox}[Stack Technique]
+\begin{tabularx}{\textwidth}{lX}
+    \toprule
+    \textbf{Composant} & \textbf{Technologie} \\
+    \midrule
+    Framework & .NET 10 (SDK 10.0.202) \\
+    Frontend & Blazor Server (Interactive Server Rendering) \\
+    ORM & Entity Framework Core 10.0.3 \\
+    Base de données & SQLite \\
+    API externe & Binance Public API v3 (REST + WebSocket) \\
+    Graphiques & Chart.js 4.4.7 \\
+    Icônes & Bootstrap Icons 1.13.1 \\
+    Typographie & Google Fonts (Inter) \\
+    \bottomrule
+\end{tabularx}
+\end{techbox}
+
+% ================================================================
+\section{Analyse, Architecture et Conception}
+% ================================================================
+
+\subsection{Diagramme des Cas d'Utilisation}
+
+Le diagramme des cas d'utilisation illustre les interactions possibles entre l'utilisateur et le système de gestion de portefeuille CryptoVault. L'utilisateur principal peut interagir avec plusieurs modules de l'application.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    usecase/.style={ellipse, draw=cvblue, fill=cvblue!5, thick, minimum width=3.5cm, minimum height=1.2cm, align=center, text width=3.5cm, font=\small},
+    actor/.style={align=center, font=\bfseries},
+    conn/.style={-, thick, color=cvgray}
+]
+    % Actor: Utilisateur
+    \node (head) at (0, 1) [circle, draw=cvdark, thick, minimum size=0.6cm] {};
+    \draw[thick, cvdark] (0, 0.7) -- (0, -0.2); % Body
+    \draw[thick, cvdark] (-0.4, 0.4) -- (0.4, 0.4); % Arms
+    \draw[thick, cvdark] (0, -0.2) -- (-0.4, -1); % Left Leg
+    \draw[thick, cvdark] (0, -0.2) -- (0.4, -1); % Right Leg
+    \node[actor] (user) at (0, -1.4) {Utilisateur};
+
+    % Use Cases
+    \node[usecase] (uc1) at (6, 4) {Consulter le\\Dashboard global};
+    \node[usecase] (uc2) at (6, 2.5) {Explorer le Marché\\(Données temps réel)};
+    \node[usecase] (uc3) at (6, 1) {Simuler des Trades\\(Achat/Vente)};
+    \node[usecase] (uc4) at (6, -0.5) {Gérer la Watchlist};
+    \node[usecase] (uc5) at (6, -2) {Configurer des Alertes de prix};
+    \node[usecase] (uc6) at (6, -3.5) {Consulter l'historique des transactions};
+
+    % Connections
+    \draw[conn] (0.5, 0) -- (uc1.west);
+    \draw[conn] (0.5, 0) -- (uc2.west);
+    \draw[conn] (0.5, 0) -- (uc3.west);
+    \draw[conn] (0.5, 0) -- (uc4.west);
+    \draw[conn] (0.5, 0) -- (uc5.west);
+    \draw[conn] (0.5, 0) -- (uc6.west);
+
+    % System Boundary
+    \begin{scope}[on background layer]
+        \node[draw=cvgray, thick, rounded corners, fill=codebg, fit=(uc1) (uc6), inner sep=0.5cm] (system) {};
+        \node[anchor=south, font=\bfseries\large] at (system.north) {Système CryptoVault};
+    \end{scope}
+\end{tikzpicture}
+\caption{Diagramme des cas d'utilisation}
+\end{figure}
+
+\subsection{Schéma d'Architecture (Clean Architecture)}
+
+L'application suit une \textbf{architecture en couches} (Clean Architecture) au sein d'un seul projet Blazor Server, avec une séparation stricte des responsabilités pour garantir la maintenabilité et l'évolutivité du code.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    layer/.style={rectangle, draw=cvblue, fill=white, thick, minimum width=12cm, minimum height=1.5cm, rounded corners, align=center, font=\bfseries},
+    component/.style={rectangle, draw=cvgold, fill=cvgold!10, rounded corners, minimum height=1cm, align=center, font=\small, text width=3cm},
+    arrow/.style={->, >=stealth, thick, color=cvgray}
+]
+    % UI Layer
+    \node[layer, label={[anchor=south, inner sep=2pt]90:\color{cvblue}Couche Présentation (UI Blazor)}] (ui) at (0, 0) {};
+    \node[component] at (-4, 0) {Pages Blazor\\(Market, Trade...)};
+    \node[component] at (0, 0) {Composants Partagés\\(Charts, Modals)};
+    \node[component] at (4, 0) {CSS et JS\\(Design System)};
+
+    % Application Layer
+    \node[layer, label={[anchor=south, inner sep=2pt]90:\color{cvblue}Couche Application (Business)}] (app) at (0, -3) {};
+    \node[component] at (-4, -3) {Interfaces (Contrats)};
+    \node[component] at (0, -3) {Services Métier\\(Portfolio, Trading...)};
+    \node[component] at (4, -3) {DTOs};
+
+    % Domain Layer
+    \node[layer, label={[anchor=south, inner sep=2pt]90:\color{cvblue}Couche Domaine (Core)}] (domain) at (0, -6) {};
+    \node[component] at (-2, -6) {Entités de données\\(Portfolio, Asset...)};
+    \node[component] at (2, -6) {Énumérations\\(TransType...)};
+
+    % Infrastructure Layer
+    \node[layer, label={[anchor=south, inner sep=2pt]90:\color{cvblue}Couche Infrastructure (Data \& API)}] (infra) at (0, -9) {};
+    \node[component] at (-4, -9) {EF Core DbContext\\(SQLite)};
+    \node[component] at (0, -9) {BinanceApiClient\\(REST + Cache)};
+    \node[component] at (4, -9) {WebSocket Stream\\(Temps Réel)};
+
+    % Arrow Connections
+    \draw[arrow] (ui.south) -- node[right, font=\footnotesize] {Appelle les interfaces} (app.north);
+    \draw[arrow] (app.south) -- node[right, font=\footnotesize] {Utilise le domaine} (domain.north);
+    \draw[arrow] (infra.north) -- node[right, font=\footnotesize] {Implémente les interfaces} (app.south);
+    \draw[arrow] (infra.north) -- node[left, font=\footnotesize] {Stocke le domaine} (domain.south);
+
+\end{tikzpicture}
+\caption{Schéma de l'Architecture en Couches}
+\end{figure}
+
+\begin{infobox}[Organisation des couches]
+\begin{itemize}[leftmargin=1cm]
+    \item \texttt{Domain/} --- Entités métier et enums (aucune dépendance externe, isolation totale)
+    \item \texttt{Application/} --- Interfaces, DTOs, et implémentation de la logique métier (Services)
+    \item \texttt{Infrastructure/} --- Base de données (EF Core SQLite), intégration API Binance (REST + WebSocket)
+    \item \texttt{Components/} --- Interface utilisateur Blazor (Pages, Layout, composants réutilisables partagés)
+\end{itemize}
+\end{infobox}
+
+\subsection{Diagramme de Classes (Modèle de Données)}
+
+La modélisation des données s'articule autour de l'entité centrale \texttt{Portfolio}, qui agrège tous les actifs et opérations de l'utilisateur.
+
+\begin{figure}[H]
+\centering
+\resizebox{0.95\textwidth}{!}{
+\begin{tikzpicture}[
+    classNode/.style={rectangle split, rectangle split parts=3, draw=cvblue, fill=white, thick, text width=4.5cm, rounded corners, font=\footnotesize},
+    assoc/.style={-, thick},
+    inher/.style={->, >=stealth, thick}
+]
+    % Portfolio
+    \node[classNode] (Portfolio) at (0, 0) {
+        \textbf{Portfolio}
+        \nodepart{two}
+        + Id : int \\
+        + Name : string \\
+        + InitialBudget : decimal \\
+        + CurrentBudget : decimal \\
+        + CreatedAt : DateTime
+        \nodepart{three}
+    };
+
+    % Asset
+    \node[classNode] (Asset) at (-6, -4) {
+        \textbf{Asset}
+        \nodepart{two}
+        + Id : int \\
+        + Symbol : string \\
+        + Quantity : decimal \\
+        + AverageBuyPrice : decimal \\
+        + TotalInvested : decimal
+        \nodepart{three}
+    };
+
+    % Transaction
+    \node[classNode] (Transaction) at (0, -4) {
+        \textbf{Transaction}
+        \nodepart{two}
+        + Id : int \\
+        + Symbol : string \\
+        + Type : TransactionType \\
+        + Quantity : decimal \\
+        + PricePerUnit : decimal \\
+        + Fee : decimal \\
+        + ExecutedAt : DateTime
+        \nodepart{three}
+    };
+
+    % WatchlistItem
+    \node[classNode] (WatchlistItem) at (6, -4) {
+        \textbf{WatchlistItem}
+        \nodepart{two}
+        + Id : int \\
+        + Symbol : string \\
+        + Name : string \\
+        + AddedAt : DateTime
+        \nodepart{three}
+    };
+
+    % Alert
+    \node[classNode] (Alert) at (0, -8.5) {
+        \textbf{Alert}
+        \nodepart{two}
+        + Id : int \\
+        + Symbol : string \\
+        + Type : AlertType \\
+        + TargetPrice : decimal \\
+        + IsTriggered : bool
+        \nodepart{three}
+    };
+
+    % PriceSnapshot
+    \node[classNode, text width=4cm] (PriceSnapshot) at (-6, -8.5) {
+        \textbf{PriceSnapshot}
+        \nodepart{two}
+        + Id : int \\
+        + Symbol : string \\
+        + Price : decimal \\
+        + CapturedAt : DateTime
+        \nodepart{three}
+    };
+
+    % Relationships
+    % Portfolio -> Asset (1 to N)
+    \draw[assoc] (Portfolio.west) -| node[pos=0.1, above] {1} node[pos=0.9, left] {0..*} (Asset.north);
+    % Portfolio -> Transaction (1 to N)
+    \draw[assoc] (Portfolio.south) -- node[pos=0.1, right] {1} node[pos=0.9, right] {0..*} (Transaction.north);
+    % Portfolio -> Watchlist (1 to N)
+    \draw[assoc] (Portfolio.east) -| node[pos=0.1, above] {1} node[pos=0.9, right] {0..*} (WatchlistItem.north);
+    % Portfolio -> Alert (1 to N)
+    \draw[assoc] (Portfolio.south west) ++(1.5,0) -- ++(0,-1.5) -| node[pos=0.1, left] {1} node[pos=0.9, right] {0..*} (Alert.north);
+
+\end{tikzpicture}
+}
+\caption{Diagramme de Classes UML détaillé (Relations One-to-Many encapsulées par Portfolio)}
+\end{figure}
+
+\subsection{Structure du projet}
+
+\begin{lstlisting}[caption={Arborescence du projet CryptoVault},language={}]
+CryptoVault/
+|-- Domain/
+|   |-- Entities/    (Portfolio, Asset, Transaction, WatchlistItem,
+|   |                 PriceSnapshot, Alert)
+|   |-- Enums/       (TransactionType, AlertType)
+|-- Application/
+|   |-- DTOs/        (AssetDto, PortfolioDashboardDto, MarketAssetDto,
+|   |                 TransactionDto, CandlestickDto, AlertDto)
+|   |-- Interfaces/  (IPortfolioService, IAssetService,
+|   |                 ITransactionService, IWatchlistService,
+|   |                 IMarketDataService, IAlertService,
+|   |                 IBinanceApiClient)
+|   |-- Services/    (PortfolioService, AssetService,
+|                     TransactionService, WatchlistService,
+|                     MarketDataService, AlertService)
+|-- Infrastructure/
+|   |-- Data/        (AppDbContext avec Fluent API)
+|   |-- ExternalApi/ (BinanceApiClient, BinancePriceStreamService,
+|                     BinanceModels)
+|-- Components/
+|   |-- Layout/      (MainLayout, NavMenu)
+|   |-- Pages/       (Dashboard, Assets, Transactions,
+|   |                 Watchlist, Analytics, Alerts)
+|   |-- Shared/      (PriceDisplay, ChangeIndicator, TradeModal,
+|                     AssetSearchModal, ConfirmDialog, LoadingSpinner)
+|-- wwwroot/
+|   |-- css/app.css  (Design system complet)
+|   |-- js/charts.js (Integration Chart.js)
+|-- Program.cs       (Bootstrap et DI)
+|-- appsettings.json (Configuration)
+\end{lstlisting}
+
+\subsection{Diagramme de flux de données}
+
+Le flux de données suit le schéma suivant :
+
+\begin{enumerate}
+    \item \textbf{Binance WebSocket} $\rightarrow$ \texttt{BinancePriceStreamService} (BackgroundService) $\rightarrow$ \texttt{ConcurrentDictionary} (cache en mémoire)
+    \item \textbf{Binance REST API} $\rightarrow$ \texttt{BinanceApiClient} $\rightarrow$ \texttt{IMemoryCache} (cache avec TTL)
+    \item \textbf{MarketDataService} orchestre les deux sources : priorité WebSocket, fallback REST
+    \item \textbf{Pages Blazor} $\rightarrow$ Services Application $\rightarrow$ EF Core $\rightarrow$ SQLite
+\end{enumerate}
+
+% ================================================================
+\section{Modèle de Données}
+% ================================================================
+
+\subsection{Entités du domaine}
+
+Le modèle de données comprend 6 entités principales, toutes liées au concept central de \texttt{Portfolio} :
+
+\begin{table}[H]
+\centering
+\caption{Entités du domaine CryptoVault}
+\begin{tabularx}{\textwidth}{lX}
+    \toprule
+    \textbf{Entité} & \textbf{Description} \\
+    \midrule
+    \texttt{Portfolio} & Portefeuille avec budget initial et courant, liens vers toutes les sous-entités \\
+    \texttt{Asset} & Actif détenu : symbole, quantité, prix moyen d'achat, total investi \\
+    \texttt{Transaction} & Opération d'achat ou de vente avec prix, quantité, frais, horodatage \\
+    \texttt{WatchlistItem} & Actif suivi sans position (surveillance de prix) \\
+    \texttt{Alert} & Alerte de prix configurable (au-dessus / en-dessous d'un seuil) \\
+    \texttt{PriceSnapshot} & Historique de prix pour analytics futures \\
+    \bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Relations}
+
+Toutes les entités sont liées au \texttt{Portfolio} via des relations \textbf{One-to-Many} configurées avec Fluent API :
+
+\begin{lstlisting}[caption={Configuration Fluent API --- Relations et précision décimale}]
+// Relation Portfolio -> Assets (cascade delete)
+modelBuilder.Entity<Asset>()
+    .HasOne<Portfolio>()
+    .WithMany(p => p.Assets)
+    .HasForeignKey(a => a.PortfolioId)
+    .OnDelete(DeleteBehavior.Cascade);
+
+// Precision decimale pour les montants financiers
+modelBuilder.Entity<Asset>()
+    .Property(a => a.Quantity).HasPrecision(18, 8);
+modelBuilder.Entity<Asset>()
+    .Property(a => a.AverageBuyPrice).HasPrecision(18, 8);
+\end{lstlisting}
+
+\subsection{Index composites}
+
+Des index composites sont créés pour optimiser les requêtes fréquentes :
+
+\begin{itemize}
+    \item \texttt{(PortfolioId, Symbol)} sur \texttt{Asset} --- recherche rapide d'un actif par symbole
+    \item \texttt{(PortfolioId, ExecutedAt)} sur \texttt{Transaction} --- historique chronologique
+    \item \texttt{(PortfolioId, Symbol)} sur \texttt{WatchlistItem} --- vérification de doublons
+    \item \texttt{(PortfolioId, IsActive)} sur \texttt{Alert} --- filtrage des alertes actives
+\end{itemize}
+
+% ================================================================
+\section{Intégration API Binance}
+% ================================================================
+
+\subsection{API REST}
+
+Le \texttt{BinanceApiClient} implémente l'interface \texttt{IBinanceApiClient} et fournit les opérations suivantes :
+
+\begin{table}[H]
+\centering
+\caption{Endpoints REST Binance utilisés}
+\begin{tabularx}{\textwidth}{lX}
+    \toprule
+    \textbf{Méthode} & \textbf{Description} \\
+    \midrule
+    \texttt{GetPriceAsync(symbol)} & Prix actuel d'un symbole via \texttt{/ticker/price} \\
+    \texttt{Get24hTickerAsync(symbol)} & Données 24h (prix, volume, variation) \\
+    \texttt{GetAll24hTickersAsync()} & Tous les tickers USDT triés par volume \\
+    \texttt{SearchAssetsAsync(query)} & Recherche par symbole ou nom \\
+    \texttt{GetKlinesAsync(symbol, interval)} & Données de chandelier pour graphiques \\
+    \bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{infobox}[Gestion du cache]
+Toutes les réponses REST sont mises en cache avec \texttt{IMemoryCache} pour respecter les limites de taux de l'API Binance. Le TTL (Time-To-Live) est configurable dans \texttt{appsettings.json} (par défaut : 30 secondes pour les prix, 60 secondes pour les tickers).
+\end{infobox}
+
+\subsection{WebSocket temps réel}
+
+Le \texttt{BinancePriceStreamService} est un \texttt{BackgroundService} qui maintient une connexion WebSocket permanente au flux \texttt{!miniTicker@arr} de Binance :
+
+\begin{lstlisting}[caption={Service WebSocket --- Prix en temps réel}]
+public class BinancePriceStreamService : BackgroundService
+{
+    public ConcurrentDictionary<string, decimal> LatestPrices
+        { get; } = new();
+    public bool IsConnected { get; private set; }
+
+    protected override async Task ExecuteAsync(
+        CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            // Connexion avec reconnexion automatique
+            using var ws = new ClientWebSocket();
+            await ws.ConnectAsync(wsUri, stoppingToken);
+            IsConnected = true;
+
+            // Reception et parsage des prix
+            // Stockage dans ConcurrentDictionary (thread-safe)
+        }
+    }
+}
+\end{lstlisting}
+
+\textbf{Caractéristiques :}
+\begin{itemize}
+    \item Connexion persistante avec \textbf{reconnexion automatique} en cas de déconnexion
+    \item Stockage dans un \texttt{ConcurrentDictionary<string, decimal>} (thread-safe)
+    \item Enregistré comme \textbf{Singleton} dans le conteneur DI
+    \item Priorité 1 pour les prix dans \texttt{MarketDataService}
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    process/.style={rectangle, draw=cvblue, fill=cvblue!10, thick, rounded corners, minimum width=3cm, minimum height=1cm, align=center, font=\small},
+    db/.style={cylinder, draw=cvgold, fill=cvgold!10, shape border rotate=90, aspect=0.25, minimum height=1.5cm, minimum width=1.5cm, align=center, font=\small},
+    ui/.style={rectangle, draw=cvgreen, fill=cvgreen!10, thick, minimum width=3cm, minimum height=1cm, align=center, font=\small},
+    arrow/.style={->, >=stealth, thick, color=cvgray}
+]
+    % Nodes
+    \node[process] (api) at (0, 4) {API Binance\\(Flux !miniTicker@arr)};
+    \node[process] (stream) at (0, 2) {BinancePriceStreamService\\(Singleton, Task Async)};
+    \node[db] (dict) at (0, 0) {Concurrent\\Dictionary};
+    
+    \node[process] (timer) at (5, 2) {Timer Blazor\\(Toutes les 2.0s)};
+    \node[ui] (blazor) at (5, 0) {Composants Blazor\\(StateHasChanged)};
+    \node[process] (ef) at (5, -2) {EF Core / UI Scope\\(SQLite)};
+
+    % Connections
+    \draw[arrow] (api) -- node[right, font=\footnotesize] {WebSocket Ticks} (stream);
+    \draw[arrow] (stream) -- node[right, font=\footnotesize] {Met à jour} (dict);
+    \draw[arrow] (timer) -- node[right, font=\footnotesize] {InvokeAsync} (blazor);
+    \draw[arrow, dashed] (blazor) -- node[below, font=\footnotesize] {Lit les prix} (dict);
+    \draw[arrow, dashed] (blazor) -- node[right, font=\footnotesize] {Lecture sécurisée} (ef);
+
+    % Background Box for Server
+    \begin{scope}[on background layer]
+        \node[draw=cvgray, thick, rounded corners, fill=codebg, fit=(stream) (dict) (timer) (blazor) (ef), inner sep=0.5cm] (server) {};
+        \node[anchor=south east, font=\bfseries] at (server.north east) {Serveur .NET 10};
+    \end{scope}
+
+\end{tikzpicture}
+\caption{Architecture de la boucle de synchronisation temps réel (Background Polling)}
+\end{figure}
+
+% ================================================================
+\section{Services Applicatifs}
+% ================================================================
+
+\subsection{PortfolioService}
+
+Service central qui :
+\begin{itemize}
+    \item Crée automatiquement le portefeuille par défaut avec un budget initial de 10 000 \$
+    \item Agrège toutes les données du dashboard (valeur totale, P\&L, allocation, transactions récentes)
+    \item Enrichit chaque actif avec les données de marché en temps réel
+    \item Calcule les pourcentages d'allocation et les couleurs du graphique
+\end{itemize}
+
+\subsection{TransactionService}
+
+Implémente la logique de trading simulé :
+
+\begin{techbox}[Logique de trading]
+\begin{enumerate}
+    \item \textbf{Achat} : Validation du budget $\rightarrow$ Calcul du coût total (montant + 0.1\% de frais) $\rightarrow$ Déduction du budget $\rightarrow$ Mise à jour de l'actif (prix moyen pondéré) $\rightarrow$ Enregistrement de la transaction
+    \item \textbf{Vente} : Validation des avoirs $\rightarrow$ Calcul du revenu (montant -- 0.1\% de frais) $\rightarrow$ Ajout au budget $\rightarrow$ Réduction proportionnelle de l'investissement total $\rightarrow$ Enregistrement
+\end{enumerate}
+\end{techbox}
+
+\textbf{Formule du prix moyen pondéré :}
+\begin{equation}
+    P_{avg} = \frac{P_{old} \times Q_{old} + P_{new} \times Q_{new}}{Q_{old} + Q_{new}}
+\end{equation}
+
+\subsection{AssetService}
+
+Gère les actifs du portefeuille avec :
+\begin{itemize}
+    \item Ajout ou mise à jour d'actifs avec recalcul du prix moyen pondéré
+    \item Réduction proportionnelle du \texttt{TotalInvested} lors des ventes
+    \item Enrichissement des DTOs avec données de marché en temps réel
+    \item Calcul des pourcentages d'allocation
+\end{itemize}
+
+\subsection{MarketDataService}
+
+Couche d'orchestration qui combine les deux sources de données :
+
+\begin{enumerate}
+    \item \textbf{Priorité 1} : Prix WebSocket en temps réel (latence $<$ 1s)
+    \item \textbf{Priorité 2} : API REST avec cache (fallback)
+\end{enumerate}
+
+\subsection{AlertService et WatchlistService}
+
+\begin{itemize}
+    \item \textbf{AlertService} : Création d'alertes \texttt{PriceAbove} ou \texttt{PriceBelow}, vérification automatique contre les prix courants, déclenchement avec horodatage
+    \item \textbf{WatchlistService} : Ajout/suppression d'actifs surveillés avec prévention des doublons
+\end{itemize}
+
+% ================================================================
+\section{Interface Utilisateur}
+% ================================================================
+
+\subsection{Design System}
+
+L'interface utilise un \textbf{design system complet} défini dans \texttt{wwwroot/css/app.css} avec plus de 1000 lignes de CSS personnalisé :
+
+\begin{table}[H]
+\centering
+\caption{Tokens du Design System}
+\begin{tabularx}{\textwidth}{lX}
+    \toprule
+    \textbf{Catégorie} & \textbf{Détails} \\
+    \midrule
+    Couleurs & Dark theme Binance (\texttt{\#0B0E11}, \texttt{\#1E2329}), accent or (\texttt{\#F0B90B}), vert/rouge sémantiques \\
+    Typographie & Google Fonts Inter (300--800), tabular-nums pour les chiffres \\
+    Effets & Glassmorphism (\texttt{backdrop-filter: blur}), ombres multi-niveaux, bordures subtiles \\
+    Animations & Slide-up, fade-in, pulse (indicateur live), shimmer (skeleton loading), scale-in (modals) \\
+    Composants & Cards, buttons, inputs, badges, modals, tables, toasts, spinners, charts \\
+    Responsive & Breakpoints à 1200px et 768px, sidebar rétractable \\
+    \bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Pages de l'application}
+
+\begin{table}[H]
+\centering
+\caption{Pages et fonctionnalités}
+\begin{tabularx}{\textwidth}{llX}
+    \toprule
+    \textbf{Route} & \textbf{Page} & \textbf{Fonctionnalités} \\
+    \midrule
+    \texttt{/} & Dashboard & Cartes statistiques, tableau des avoirs, graphique d'allocation (donut Chart.js), top performers, transactions récentes \\
+    \texttt{/assets} & Assets & Liste complète avec tri (valeur, P\&L, 24h, nom), boutons Buy/Sell, recherche d'actifs avec modal \\
+    \texttt{/transactions} & Transactions & Historique complet avec filtres (Buy/Sell), recherche par symbole, résumés agrégés \\
+    \texttt{/watchlist} & Watchlist & Suivi d'actifs avec prix live, achat rapide, ajout via recherche \\
+    \texttt{/analytics} & Analytics & Graphique de performance (bar chart), allocation (donut), classement des actifs avec totaux \\
+    \texttt{/alerts} & Alertes & Création d'alertes (PriceAbove/PriceBelow), filtres actif/déclenché, distance au seuil \\
+    \bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Composants réutilisables}
+
+\begin{itemize}
+    \item \textbf{PriceDisplay} --- Affichage intelligent des prix avec formatage adaptatif (2 à 8 décimales selon la valeur)
+    \item \textbf{ChangeIndicator} --- Indicateur de variation avec flèche, couleur, et pourcentage
+    \item \textbf{TradeModal} --- Modal de trading complet avec onglets Buy/Sell, boutons de pourcentage rapide (25\%, 50\%, 75\%, 100\%), affichage des frais
+    \item \textbf{AssetSearchModal} --- Recherche d'actifs avec debounce (400ms), résultats en temps réel
+    \item \textbf{ConfirmDialog} --- Dialogue de confirmation réutilisable
+    \item \textbf{LoadingSpinner} --- Animation de chargement avec le thème doré
+\end{itemize}
+
+% ================================================================
+\section{Injection de Dépendances}
+% ================================================================
+
+La configuration DI dans \texttt{Program.cs} respecte les bonnes pratiques de cycle de vie :
+
+\begin{lstlisting}[caption={Configuration de l'injection de dépendances}]
+// Singleton : Service WebSocket (etat partage)
+builder.Services.AddSingleton<BinancePriceStreamService>();
+builder.Services.AddHostedService(
+    sp => sp.GetRequiredService<BinancePriceStreamService>());
+
+// HttpClient : Typed client pour Binance
+builder.Services.AddHttpClient<IBinanceApiClient,
+    BinanceApiClient>();
+
+// Scoped : Services applicatifs (par requete)
+builder.Services.AddScoped<IPortfolioService, PortfolioService>();
+builder.Services.AddScoped<IAssetService, AssetService>();
+builder.Services.AddScoped<ITransactionService,
+    TransactionService>();
+builder.Services.AddScoped<IMarketDataService,
+    MarketDataService>();
+builder.Services.AddScoped<IWatchlistService, WatchlistService>();
+builder.Services.AddScoped<IAlertService, AlertService>();
+
+// DbContext : Scoped par defaut avec EF Core
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlite(connectionString));
+\end{lstlisting}
+
+% ================================================================
+\section{Sécurité et Bonnes Pratiques}
+% ================================================================
+
+\begin{itemize}
+    \item \textbf{Aucune clé API} --- Utilisation exclusive de l'API publique Binance (pas de données sensibles)
+    \item \textbf{Validation côté serveur} --- Validation du budget avant chaque achat, vérification des avoirs avant chaque vente
+    \item \textbf{Thread Safety} --- \texttt{ConcurrentDictionary} pour les prix WebSocket, services Scoped pour l'isolation
+    \item \textbf{Gestion des erreurs} --- Try/catch dans tous les services avec logging structuré via \texttt{ILogger<T>}
+    \item \textbf{Anti-forgery} --- Token CSRF activé par défaut dans Blazor Server
+    \item \textbf{Reconnexion automatique} --- Le service WebSocket se reconnecte automatiquement avec un délai exponentiel
+    \item \textbf{Culture Invariante} --- Parsing des décimaux avec \texttt{CultureInfo.InvariantCulture} pour compatibilité multi-locale
+\end{itemize}
+
+% ================================================================
+\section{Tests et Validation}
+% ================================================================
+
+\subsection{Compilation}
+
+Le projet compile avec succès sous .NET 10 :
+
+\begin{verbatim}
+dotnet build
+  CryptoVault -> bin/Debug/net10.0/CryptoVault.dll
+  La generation a reussi.
+  1 Avertissement(s)
+  0 Erreur(s)
+\end{verbatim}
+
+\subsection{Exécution}
+
+L'application démarre correctement avec :
+\begin{itemize}
+    \item Initialisation automatique de la base SQLite via \texttt{EnsureCreated()}
+    \item Connexion WebSocket Binance établie
+    \item Serveur HTTP à l'écoute sur le port configuré
+\end{itemize}
+
+\subsection{Fonctionnalités vérifiées}
+
+\begin{table}[H]
+\centering
+\caption{Matrice de validation}
+\begin{tabularx}{\textwidth}{Xl}
+    \toprule
+    \textbf{Fonctionnalité} & \textbf{Statut} \\
+    \midrule
+    Création automatique du portefeuille & Validé \\
+    Recherche d'actifs via API Binance & Validé \\
+    Achat avec déduction du budget & Validé \\
+    Vente avec restitution au budget & Validé \\
+    Calcul du prix moyen pondéré & Validé \\
+    Frais de transaction (0.1\%) & Validé \\
+    Graphiques d'allocation (Chart.js) & Validé \\
+    Graphique de performance & Validé \\
+    Watchlist sans doublons & Validé \\
+    Alertes de prix & Validé \\
+    Navigation entre pages & Validé \\
+    Responsive design & Validé \\
+    Prix temps réel via WebSocket & Validé \\
+    \bottomrule
+\end{tabularx}
+\end{table}
+
+% ================================================================
+\section{Conclusion}
+% ================================================================
+
+CryptoVault est une application de gestion de portefeuille d'investissement en cryptomonnaies qui démontre la maîtrise des concepts avancés du framework .NET :
+
+\begin{itemize}
+    \item \textbf{Clean Architecture} avec séparation stricte des responsabilités et interfaces
+    \item \textbf{Entity Framework Core} avec Fluent API, index composites, et relations One-to-Many
+    \item \textbf{Blazor Server} avec rendu interactif, streaming, et composants réutilisables
+    \item \textbf{Injection de dépendances} avec gestion correcte des cycles de vie (Singleton, Scoped, Transient)
+    \item \textbf{Intégration d'API reste externe} (Binance) avec cache, gestion d'erreurs, et client typé
+    \item \textbf{WebSocket} pour les données temps réel avec reconnexion automatique
+    \item \textbf{Interface utilisateur professionnelle} avec design system complet, animations, et graphiques interactifs
+\end{itemize}
+
+Le projet va au-delà des exigences académiques en proposant une application qui pourrait servir de base à un produit fintech réel, avec une attention particulière portée à la qualité du code, la robustesse, et l'expérience utilisateur.
+
+\subsection{Améliorations futures possibles}
+
+\begin{enumerate}
+    \item Authentification et multi-utilisateur (ASP.NET Identity)
+    \item Notifications push via SignalR pour les alertes déclenchées
+    \item Graphiques de chandelier interactifs avec zoom
+    \item Export des données en CSV/PDF
+    \item Backtesting de stratégies d'investissement
+    \item Support de plus de paires (EUR, BTC quotes)
+\end{enumerate}
+
+% ================================================================
+% ANNEXES
+% ================================================================
+\newpage
+\appendix
+
+\section{Configuration de l'application}
+
+\begin{lstlisting}[caption={appsettings.json},language={}]
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=cryptovault.db"
+  },
+  "Portfolio": {
+    "InitialBudget": "10000.00",
+    "DefaultName": "My Portfolio"
+  },
+  "Binance": {
+    "BaseUrl": "https://api.binance.com",
+    "WebSocketUrl": "wss://stream.binance.com:9443/ws",
+    "CacheDurationSeconds": 30
+  }
+}
+\end{lstlisting}
+
+\section{Fichier projet}
+
+\begin{lstlisting}[caption={CryptoVault.csproj},language=XML]
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>CryptoVault</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference
+        Include="Microsoft.EntityFrameworkCore.Design"
+        Version="10.0.3" />
+    <PackageReference
+        Include="Microsoft.EntityFrameworkCore.Sqlite"
+        Version="10.0.3" />
+  </ItemGroup>
+</Project>
+\end{lstlisting}
+
+\end{document}

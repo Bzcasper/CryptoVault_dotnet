@@ -1,0 +1,35 @@
+@* Reusable confirmation dialog *@
+
+@if (IsVisible)
+{
+    <div class="cv-modal-overlay" @onclick="OnCancel">
+        <div class="cv-modal" @onclick:stopPropagation="true" style="max-width: 400px;">
+            <div class="cv-modal-header">
+                <span class="cv-modal-title">@Title</span>
+                <button class="cv-modal-close" @onclick="OnCancel">✕</button>
+            </div>
+            <div class="cv-modal-body">
+                <p style="color: var(--text-secondary);">@Message</p>
+            </div>
+            <div class="cv-modal-footer">
+                <button class="cv-btn cv-btn-ghost" @onclick="OnCancel">Cancel</button>
+                <button class="cv-btn @ConfirmButtonClass" @onclick="OnConfirmClick">@ConfirmText</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string Title { get; set; } = "Confirm Action";
+    [Parameter] public string Message { get; set; } = "Are you sure?";
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public string ConfirmButtonClass { get; set; } = "cv-btn-danger";
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task OnConfirmClick()
+    {
+        await OnConfirm.InvokeAsync();
+    }
+}

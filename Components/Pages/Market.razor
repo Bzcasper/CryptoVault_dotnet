@@ -1,0 +1,344 @@
+@page "/market"
+@rendermode InteractiveServer
+@attribute [StreamRendering]
+@inject IMarketDataService MarketData
+@inject IWatchlistService WatchlistService
+@inject IPortfolioService PortfolioService
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Market — CryptoVault</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Market Overview</h1>
+        <div class="page-subtitle">Real-time cryptocurrency prices from Binance</div>
+    </div>
+    <button class="cv-btn cv-btn-ghost" @onclick="RefreshData">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+</div>
+
+@if (allAssets == null)
+{
+    <LoadingSpinner />
+}
+else
+{
+    <!-- Market Nav & Search -->
+    <div class="market-controls animate-in" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+        <div class="category-tabs" style="display: flex; gap: 24px;">
+            <button class="category-tab @(activeCategory == "Favorites" ? "active" : "")" style="background: none; border: none; color: var(--text-secondary); font-weight: 600; padding-bottom: 4px; cursor: pointer;" @onclick='() => SetCategory("Favorites")'>
+                <i class="bi bi-star-fill" style="margin-right: 4px;"></i> Favorites
+            </button>
+            <button class="category-tab @(activeCategory == "All" ? "active" : "")" style="background: none; border: none; color: var(--text-secondary); font-weight: 600; padding-bottom: 4px; cursor: pointer;" @onclick='() => SetCategory("All")'>
+                All Cryptos
+            </button>
+            <button class="category-tab @(activeCategory == "Spot" ? "active" : "")" style="background: none; border: none; color: var(--text-secondary); font-weight: 600; padding-bottom: 4px; cursor: pointer;" @onclick='() => SetCategory("Spot")'>
+                Spot Markets
+            </button>
+            <button class="category-tab @(activeCategory == "Layer1" ? "active" : "")" style="background: none; border: none; color: var(--text-secondary); font-weight: 600; padding-bottom: 4px; cursor: pointer;" @onclick='() => SetCategory("Layer1")'>
+                Layer 1
+            </button>
+        </div>
+
+        <div class="search-bar" style="width: 280px;">
+            <i class="bi bi-search search-icon"></i>
+            <input type="text" class="cv-input" style="padding-left: 36px; font-size: 0.85rem;"
+                   placeholder="Search by name or symbol..."
+                   @bind="searchQuery" @bind:event="oninput" @onkeyup="ApplyFilters" />
+        </div>
+    </div>
+
+    <!-- Market Table -->
+    <div class="cv-card animate-in" style="animation-delay: 200ms; padding: 0;">
+        <div style="overflow-x: auto;">
+            <table class="cv-table market-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px; text-align: center;">#</th>
+                        <th>Name</th>
+                        <th style="text-align:right">Price</th>
+                        <th style="text-align:right; cursor: pointer;" @onclick="ToggleSortByChange">
+                            24h Change
+                            @if (sortByChange)
+                            {
+                                <i class="bi bi-sort-down" style="font-size: 0.7rem; margin-left: 4px;"></i>
+                            }
+                        </th>
+                        <th style="text-align:right">24h High / Low</th>
+                        <th style="text-align:right">24h Volume</th>
+                        <th style="text-align:center; width: 100px;">Chart</th>
+                        <th style="text-align:center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var asset in filteredAssets)
+                    {
+                        <tr class="market-row" @onclick="() => GoToTrade(asset.Symbol)">
+                            <td style="text-align: center; color: var(--text-tertiary); font-weight: 600;">
+                                @asset.Rank
+                            </td>
+                            <td>
+                                <div class="asset-cell">
+                                    <img src="@(string.IsNullOrEmpty(asset.ImageUrl) ? "/images/fallback.png" : asset.ImageUrl)"
+                                         alt="@asset.BaseAsset" 
+                                         class="asset-icon"
+                                         onerror="this.onerror=null;this.src='/images/fallback.png';" />
+                                    <div>
+                                        <div class="asset-symbol">@asset.BaseAsset</div>
+                                        <div class="asset-name">@asset.DisplayName</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="price-cell">
+                                <PriceDisplay Value="@asset.Price" />
+                            </td>
+                            <td style="text-align: right;">
+                                <span class="market-change-badge @(asset.PriceChangePercent >= 0 ? "positive" : "negative")">
+                                    @(asset.PriceChangePercent >= 0 ? "+" : "")@asset.PriceChangePercent.ToString("N2")%
+                                </span>
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums; font-size: 0.82rem;">
+                                <span style="color: var(--success);">@FormatPrice(asset.HighPrice)</span>
+                                <span style="color: var(--text-tertiary); margin: 0 4px;">/</span>
+                                <span style="color: var(--danger);">@FormatPrice(asset.LowPrice)</span>
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                @FormatVolume(asset.QuoteVolume)
+                            </td>
+                            <td style="text-align: center;" @onclick:stopPropagation="true">
+                                <div class="sparkline-cell">
+                                    <canvas id="spark-@asset.BaseAsset" width="80" height="32"></canvas>
+                                </div>
+                            </td>
+                            <td style="text-align: center;" @onclick:stopPropagation="true">
+                                <div style="display: flex; gap: 6px; justify-content: center;">
+                                    <button class="cv-btn cv-btn-primary cv-btn-sm" @onclick="() => GoToTrade(asset.Symbol)"
+                                            title="Trade @asset.BaseAsset">
+                                        <i class="bi bi-arrow-left-right"></i>
+                                    </button>
+                                    <button class="cv-btn cv-btn-ghost cv-btn-sm" @onclick="() => ToggleWatchlist(asset)"
+                                            title="@(IsInWatchlist(asset.Symbol) ? "Remove from Watchlist" : "Add to Watchlist")">
+                                        <i class="bi @(IsInWatchlist(asset.Symbol) ? "bi-star-fill" : "bi-star")"
+                                           style="@(IsInWatchlist(asset.Symbol) ? "color: var(--accent);" : "")"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!filteredAssets.Any())
+        {
+            <div class="empty-state" style="padding: 40px;">
+                <div class="empty-state-icon"><i class="bi bi-search"></i></div>
+                <div class="empty-state-text">No assets found</div>
+                <div class="empty-state-hint">Try a different search or category filter</div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<MarketAssetDto> allAssets;
+    private List<MarketAssetDto> filteredAssets = new();
+    private List<MarketAssetDto> topGainers = new();
+    private List<MarketAssetDto> topLosers = new();
+    private List<MarketAssetDto> topVolume = new();
+    private HashSet<string> watchlistSymbols = new();
+    private int portfolioId;
+
+    private string activeCategory = "All";
+    private string searchQuery = "";
+    private bool sortByChange = false;
+
+    private System.Timers.Timer _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var portfolio = await PortfolioService.GetOrCreateDefaultPortfolioAsync();
+        portfolioId = portfolio.Id;
+
+        // Load watchlist
+        var watchlist = await WatchlistService.GetWatchlistAsync(portfolioId);
+        watchlistSymbols = new HashSet<string>(watchlist.Select(w => w.Symbol));
+
+        await LoadMarketData();
+
+        _timer = new System.Timers.Timer(1500);
+        _timer.Elapsed += async (s, e) => {
+            try {
+                await InvokeAsync(async () => {
+                    await LoadMarketData();
+                    StateHasChanged();
+                    await RenderSparklines();
+                });
+            } catch { /* Suppress EF Core errors */ }
+        };
+        _timer.Start();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && filteredAssets?.Any() == true)
+        {
+            await RenderSparklines();
+        }
+    }
+
+    private async Task LoadMarketData()
+    {
+        allAssets = await MarketData.GetAllMarketAssetsAsync();
+
+        // Calculate top movers
+        topGainers = allAssets.OrderByDescending(a => a.PriceChangePercent).Take(3).ToList();
+        topLosers = allAssets.OrderBy(a => a.PriceChangePercent).Take(3).ToList();
+        topVolume = allAssets.OrderByDescending(a => a.QuoteVolume).Take(3).ToList();
+
+        ApplyFilters();
+    }
+
+    private void SetCategory(string category)
+    {
+        activeCategory = category;
+        ApplyFilters();
+    }
+
+    private void ToggleSortByChange()
+    {
+        sortByChange = !sortByChange;
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        if (allAssets == null) return;
+
+        var filtered = allAssets.AsEnumerable();
+
+        // Category filter
+        if (activeCategory == "Favorites")
+        {
+            filtered = filtered.Where(a => watchlistSymbols.Contains(a.Symbol));
+        }
+        else if (activeCategory == "All" || activeCategory == "Spot")
+        {
+            // Do nothing, show all, assuming everything is Spot for this demo
+        }
+        else if (activeCategory != "All")
+        {
+            filtered = filtered.Where(a => a.Category == activeCategory);
+        }
+
+        // Search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var q = searchQuery.ToUpperInvariant();
+            filtered = filtered.Where(a =>
+                a.BaseAsset.Contains(q) ||
+                a.Symbol.Contains(q) ||
+                a.DisplayName.ToUpperInvariant().Contains(q));
+        }
+
+        // Sort
+        if (sortByChange)
+        {
+            filtered = filtered.OrderByDescending(a => Math.Abs(a.PriceChangePercent));
+        }
+
+        filteredAssets = filtered.ToList();
+    }
+
+    private async Task RenderSparklines()
+    {
+        // Render simple sparklines based on high/low/price to create a visual indicator
+        foreach (var asset in filteredAssets.Take(50))
+        {
+            var color = asset.PriceChangePercent >= 0 ? "#0ECB81" : "#F6465D";
+            // Generate mock sparkline from low → random midpoints → current price
+            var low = (double)asset.LowPrice;
+            var high = (double)asset.HighPrice;
+            var current = (double)asset.Price;
+            var values = GenerateSparklineData(low, high, current, asset.PriceChangePercent >= 0);
+            try
+            {
+                await JS.InvokeVoidAsync("createSparkline", $"spark-{asset.BaseAsset}", values, color);
+            }
+            catch { /* Canvas might not be rendered yet */ }
+        }
+    }
+
+    private double[] GenerateSparklineData(double low, double high, double current, bool isPositive)
+    {
+        // Deterministic sparkline based on price range
+        var range = high - low;
+        if (range <= 0) range = current * 0.01;
+        var mid = (high + low) / 2;
+
+        if (isPositive)
+        {
+            return new[] { low, low + range*0.15, low + range*0.1, mid - range*0.1, mid, mid + range*0.2, mid + range*0.1, current };
+        }
+        else
+        {
+            return new[] { high, high - range*0.15, high - range*0.1, mid + range*0.1, mid, mid - range*0.2, mid - range*0.1, current };
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        allAssets = null;
+        StateHasChanged();
+        await Task.Delay(200);
+        await LoadMarketData();
+        StateHasChanged();
+        await RenderSparklines();
+    }
+
+    private void GoToTrade(string symbol)
+    {
+        NavManager.NavigateTo($"/trade/{symbol}");
+    }
+
+    private bool IsInWatchlist(string symbol) => watchlistSymbols.Contains(symbol);
+
+    private async Task ToggleWatchlist(MarketAssetDto asset)
+    {
+        if (watchlistSymbols.Contains(asset.Symbol))
+        {
+            await WatchlistService.RemoveFromWatchlistBySymbolAsync(portfolioId, asset.Symbol);
+            watchlistSymbols.Remove(asset.Symbol);
+        }
+        else
+        {
+            await WatchlistService.AddToWatchlistAsync(portfolioId, asset.Symbol, asset.DisplayName, asset.ImageUrl);
+            watchlistSymbols.Add(asset.Symbol);
+        }
+    }
+
+    private string FormatPrice(decimal price)
+    {
+        if (price >= 1000) return price.ToString("N2");
+        if (price >= 1) return price.ToString("N3");
+        if (price >= 0.01m) return price.ToString("N4");
+        return price.ToString("N6");
+    }
+
+    private string FormatVolume(decimal volume)
+    {
+        if (volume >= 1_000_000_000) return "$" + (volume / 1_000_000_000).ToString("N2") + "B";
+        if (volume >= 1_000_000) return "$" + (volume / 1_000_000).ToString("N2") + "M";
+        if (volume >= 1_000) return "$" + (volume / 1_000).ToString("N2") + "K";
+        return "$" + volume.ToString("N2");
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}
