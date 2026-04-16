@@ -1,0 +1,27 @@
+# fly.toml app configuration file generated for CryptoVault
+# See https://fly.io/docs/reference/configuration/ for information
+
+app = "cryptovault-platform"
+primary_region = "cdg"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[checks]
+  [checks.status]
+    port = 8080
+    type = "http"
+    interval = "15s"
+    timeout = "2s"
+    method = "GET"
+    path = "/health" # We should probably add a health check endpoint if it doesn't exist
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

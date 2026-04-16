@@ -61,6 +61,10 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseAntiforgery();
+
+// ====== Health Check for Fly.io ======
+app.MapGet("/health", () => Results.Ok("Healthy"));
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
